@@ -21,7 +21,7 @@
   "shots": ["model_front", "embroidery_closeup", "garment_flat"],
   "style": "Fotografía de producto de estudio, luz suave, fondo neutro, estética streetwear",
   "llm": { "model": "claude-sonnet-5-5" },
-  "imageGen": { "provider": "TBD", "model": "TBD", "size": "1024x1280", "maxCostPerDesignUsd": 3 },
+  "imageGen": { "provider": "TBD", "model": "TBD", "size": "1080x1350", "minShortSidePx": 1080, "maxCostPerDesignUsd": 3 },
   "qa": { "minScore": 4, "maxRetries": 2 },
   "store": {
     "price": 0,

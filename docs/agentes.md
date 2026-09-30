@@ -83,7 +83,7 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
 - **Rol:** llamar a la API de imágenes.
 - **Entrada:** `prompts.json` + foto del diseño (y, opcional, mockups base de `MockUps-pack/Own`).
 - **Tareas:** generar cada imagen, guardar en `output/<id>/mockups/<color>_<toma>_v<n>.png`, registrar costo y semilla,
-  exportar versión para tienda (webp/jpg ≤ 10 MB, 1:1 o 4:5, ≥1600 px).
+  exportar versión para tienda (webp/jpg ≤ 10 MB, 4:5 1080×1350 o 1:1 1080×1080 como mínimo).
 - **Salida:** imágenes + `generation.json`.
 - **Aceptación:** una imagen por prompt; errores de API reintentados con backoff.
 
