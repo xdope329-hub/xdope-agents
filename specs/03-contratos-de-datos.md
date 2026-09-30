@@ -29,7 +29,8 @@ Esquemas mínimos. Se implementan como JSON Schema (o Pydantic/Zod) y cada agent
   "categories": [
     {"category_id": "…", "name": "Anime", "role": "primary", "confidence": 0.95, "reason": "personaje de Howl's Moving Castle (Studio Ghibli)"}
   ],
-  "suggested_new_category": null
+  "suggested_new_category": null,
+  "franchise_reference": "Calcifer, de Howl's Moving Castle (Studio Ghibli)"
 }
 ```
 

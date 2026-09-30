@@ -73,6 +73,8 @@ export const CuratorPick = z
       )
       .min(1),
     suggested_new_category: z.string().min(1).nullable().default(null),
+    // Informativo: personaje o franquicia que referencia el diseño. Nunca bloquea el lote.
+    franchise_reference: z.string().min(1).nullable().default(null),
   })
   .superRefine((p, ctx) => {
     if (!p.title_options.includes(p.title)) {

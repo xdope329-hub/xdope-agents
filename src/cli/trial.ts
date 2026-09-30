@@ -169,6 +169,7 @@ ${qa?.reasons?.length ? `<details><summary>Motivos</summary><ul>${qa.reasons.map
 <div class="meta"><img class="design" src="${d.designId}/design.jpg"><div>
 <p><i>${esc(d.curator.short_description)}</i></p>
 <p><b>Categorías:</b> ${d.curator.categories.map((c: any) => `${esc(c.name)} (${c.role === "primary" ? "principal" : "secundaria"}, ${Math.round(c.confidence * 100)}%)`).join(", ")}${d.curator.suggested_new_category ? ` · sugerida: ${esc(d.curator.suggested_new_category)}` : ""}</p>
+${d.curator.franchise_reference ? `<p><b>Referencia a franquicia:</b> ${esc(d.curator.franchise_reference)}</p>` : ""}
 <p><b>Otros títulos:</b> ${d.curator.title_options.filter((t: string) => t !== d.curator.title).map(esc).join(" · ")}</p>
 <p><b>Colores:</b> ${d.colors.map((c: any) => `<span class="sw" style="background:${c.hex}"></span>${esc(c.name)}`).join(" ")}</p>
 <p><b>Modelo:</b> ${esc(d.concept)}</p>

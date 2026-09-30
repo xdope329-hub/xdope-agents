@@ -45,6 +45,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 - Con 10 diseños de ejemplo etiquetados por Diego, la categoría principal coincide en al menos 9.
 - Tallas y categoría existen en la API. Si `defaults.json` falta o tiene un id que no existe, el lote falla con un error claro; no inventa valores.
 - Si no hay diseños `new` elegibles, termina sin crear lote y lo deja registrado.
+- **No descarta diseños por propiedad intelectual.** Muchos diseños son de personajes o franquicias (anime, videojuegos); decidir si se venden es de Diego, no del agente. Si el diseño hace referencia a un personaje o franquicia, lo registra en `franchise_reference` (solo informativo, aparece en el resumen del lote) y sigue normalmente. Lo mismo aplica al Director de arte y a QA.
 
 ## 2. Preparación del diseño
 **Rol:** dejar el bordado listo para componer sobre una prenda.
