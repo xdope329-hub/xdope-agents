@@ -34,7 +34,6 @@ const ConfigShape = z.object({
   ANTHROPIC_API_KEY: z.string().min(1),
 
   MAX_IMAGE_COST_PER_PRODUCT: z.coerce.number().positive().default(3),
-  PRODUCTS_PER_RUN: z.coerce.number().int().positive().default(1),
 });
 
 export const Config = ConfigShape.superRefine((c, ctx) => {

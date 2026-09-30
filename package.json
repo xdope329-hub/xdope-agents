@@ -10,15 +10,17 @@
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
     "test": "vitest run",
-    "scan": "tsx --env-file=.env src/cli/scan.ts"
+    "scan": "tsx --env-file=.env src/cli/scan.ts",
+    "schedule:preview": "tsx src/cli/schedule-preview.ts"
   },
   "dependencies": {
+    "croner": "^9.1.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0",
-    "tsx": "^4.19.0"
+    "vitest": "^2.1.0"
   }
 }

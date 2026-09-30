@@ -1,0 +1,7 @@
+{
+  "timezone": "America/Bogota",
+  "slots": [
+    { "name": "Escaneo de bordados", "task": "scan", "days": ["lun", "mie", "vie"], "times": ["08:00"] },
+    { "name": "Publicación", "task": "publish", "days": ["lun", "mie", "vie"], "times": ["10:00"], "products": 1 }
+  ]
+}

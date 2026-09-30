@@ -10,4 +10,4 @@ Pendientes (entre paréntesis el default que asumen las specs):
 4. **Licencia de `MockUps-pack`.** (Solo se usan como base las fotos de `Own/`; el resto no se publica sin confirmar su licencia).
 5. **Tono e idioma de las fichas.** (Español, tono streetwear; el Copywriter toma 2–3 fichas actuales de la tienda como ejemplo).
 6. **Valores por defecto de `defaults.json`:** precio, tallas, categoría, material y stock por variante de los hoodies. (Se toman de los hoodies que ya están en la tienda y se le muestran a Diego para confirmar).
-7. **Frecuencia del arranque automático.** (Una vez al día, 1 producto por ejecución).
+7. **Días, horas y zona horaria de las ejecuciones.** (Lunes, miércoles y viernes: escaneo 08:00 y publicación 10:00, 1 producto; zona horaria por confirmar).

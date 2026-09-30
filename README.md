@@ -18,3 +18,8 @@ npm run typecheck && npm test
 3. El comando lista los diseños nuevos, los renombrados, los que ya no están y los duplicados. El catálogo queda en `designs.json`. La carpeta de fotos nunca se modifica.
 
 Para agregar un diseño nuevo basta con copiar su foto (JPG, PNG o WebP) en esa carpeta o en una subcarpeta y volver a escanear.
+
+## Programar ejecuciones
+1. Copia `schedule.example.json` a `schedule.json`.
+2. Ajusta `timezone`, los días (`lun` a `dom`) y las horas (`HH:MM`) de cada tarea.
+3. Corre `npm run schedule:preview` para ver las próximas ejecuciones.

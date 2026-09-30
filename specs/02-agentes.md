@@ -23,7 +23,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 
 ## 1. Curador (arranque automático)
 **Rol:** iniciar cada lote sin intervención de Diego. Elige el diseño, redacta el título y la descripción corta creativa, **categoriza el producto** y arma el `ProductBrief` para el resto de los agentes.
-**Cuándo corre:** en un horario configurable (`SCHEDULE`, por defecto una vez al día) o con el comando `npm run start`. Cada ejecución inicia `PRODUCTS_PER_RUN` lotes (por defecto 1).
+**Cuándo corre:** en los días y horas de `schedule.json` (tarea `publish`, ver `01-workflow.md`) o con el comando `npm run start`. Cada ejecución inicia `products` lotes (por defecto 1).
 **Entradas:** `designs.json`, catálogo actual de la tienda (productos, categorías, atributos), `defaults.json` y `brand-guide`.
 **Qué hace**
 1. **Elige una imagen** entre los diseños `new` que no tengan producto. Criterios, en orden: no es `low_res`; no se parece a un producto ya publicado (comparación de embeddings de imagen); alterna temas y estilos respecto a los últimos 5 lotes; a igualdad, el más antiguo primero. Guarda el motivo de la elección.

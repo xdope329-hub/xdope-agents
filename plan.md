@@ -12,7 +12,7 @@ Deriva de `specs/`. Si algo aquí contradice una spec, manda la spec.
 | Procesamiento de imagen (recorte, máscara, paleta, SSIM, ΔE) | `sharp` + utilidades propias | Corre en Node, sin Python |
 | Orquestación | Máquina de estados propia; artefactos en `runs/<run_id>/` | Estados de `specs/01`; reanudable |
 | Escaneo de diseños | CLI local en el PC de Diego (`npm run scan`) | La carpeta de fotos vive en su PC |
-| Arranque | `npm run start` + horario (`SCHEDULE`) que lanza al Curador | Todo automático hasta el producto inactivo |
+| Arranque | `schedule.json` con días y horas por tarea (`croner`, con zona horaria); `npm run start` para correr a mano | Todo automático hasta el producto inactivo |
 | Tienda | Cliente HTTP de xdopestore-api (`/login`, `/attachment`, `/product`) | Flujo real del mapeo; QA primero |
 
 Umbrales iniciales (se ajustan con la primera corrida real): contraste color de hoodie vs. hilo ΔE ≥ 25 promedio; resto según `specs/02` QA visual.
@@ -42,7 +42,8 @@ Cada tarea termina con tests que prueban sus criterios de aceptación.
 11. Copywriter.
 12. Cliente de xdopestore-api + Publicador (QA), con idempotencia por tag `agent-run:<run_id>`.
 13. Resumen del lote `review.html` (fotos, prompts, QA, costo).
-13b. Arranque automático por horario.
+13b. Programación por días y horas (`schedule.json`, validación y vista previa). ✅
+13c. Proceso programador (`npm run scheduler`) conectado al escaneo y al Curador; despliegue del worker en Render.
 
 **Fase 5: validación**
 14. Corrida de punta a punta con 3 diseños reales en QA.
