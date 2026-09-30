@@ -3,60 +3,76 @@
 ## El problema real
 Generar una persona realista con un hoodie es fácil hoy. Lo difícil es que **el bordado salga idéntico al tuyo**: los modelos generativos tienden a "reinterpretar" logos, cambiar letras, simplificar detalles y perder la textura de hilo. Por eso el pipeline separa *la foto* de *el bordado* y mide la fidelidad antes de aceptar nada.
 
-## Opciones comparadas
-Precios: verificar en la página de cada proveedor antes de implementar; todas están en el orden de centavos de dólar por imagen.
+## Opciones comparadas (precios consultados el 2026-09-30)
 
-| Opción | Qué hace bien | Riesgo con tu bordado | Encaje |
-|---|---|---|---|
-| **Google Gemini Image** ("Nano Banana", familia Gemini Image) | Edición con varias imágenes de referencia; buena preservación de logos y consistencia de persona entre tomas; muy fotorealista | Puede suavizar detalles finos o letras pequeñas | ★★★★★ ruta generativa principal |
-| **OpenAI gpt-image** (endpoint de edits con referencias y máscara) | Buen seguimiento de instrucciones y máscaras; texto legible | Tiende a "limpiar" el diseño y verse más ilustrado; más lento | ★★★★ alternativa |
-| **FLUX Kontext / FLUX (Black Forest Labs, vía API propia, fal.ai o Replicate)** | Edición con referencia muy fiel; permite entrenar un LoRA con fotos reales de tus bordados | Requiere más ajuste; LoRA implica trabajo extra | ★★★★ ideal para fase 2 (LoRA de tu marca) |
-| **Seedream (ByteDance) u otros multi-referencia** | Buena calidad y precio | Menos control y documentación | ★★★ opción de respaldo |
-| **Composición determinística** (OpenCV/Pillow: warp sobre la tela + mapa de desplazamiento + relieve de puntada + sombreado) | El bordado es literalmente tu archivo: fidelidad 100 % | Sin cuidado se ve "pegado" | ★★★★★ indispensable como red de seguridad y para tomas de detalle |
+| API | Modelo | Precio por imagen | Referencias por llamada | Resolución máx. | Para nuestro caso |
+|---|---|---|---|---|---|
+| **Google Gemini** | Nano Banana Pro (`gemini-3-pro-image`) | ≈ USD 0.134 (1K/2K), ≈ 0.24 (4K) | 6 de objeto + 5 de personaje + 3 de estilo | 4K | **Recomendada.** Google la posiciona para consistencia de marca y de personaje: el bordado va como referencia de objeto y el modelo como referencia de personaje |
+| Google Gemini | Nano Banana 2 (`gemini-3.1-flash-image`) | USD 0.101 (2K); 0.0505 en batch | 10 de objeto + 4 de personaje | 4K | Más barata; candidata si Pro no rinde lo suficiente más |
+| Black Forest Labs | FLUX.2 [flex] / [pro] / [max] | USD 0.03–0.07 por megapíxel | 8 por API | 4 MP | Muy fotorealista; [flex] "preserva detalles pequeños" y acepta color exacto en hex. **Respaldo** |
+| OpenAI | GPT Image 2 (alta calidad) | USD 0.165–0.211 | varias | 1536 px | Buena con texto, pero no llega a los 2048 px que pide la spec sin upscale y es la más cara en calidad alta |
+| ByteDance | Seedream 4.x | similar a las anteriores vía revendedores | multi-referencia | 4K | Sin API oficial directa simple; descartada por ahora |
+
+Notas: todas las imágenes de Gemini llevan la marca de agua invisible SynthID (no se ve en la foto). Los precios cambian seguido: se vuelven a verificar antes de pasar a producción.
+
+Fuentes: [precios Gemini API](https://ai.google.dev/gemini-api/docs/pricing), [modelos de imagen Gemini](https://ai.google.dev/gemini-api/docs/image-generation), [precio Nano Banana Pro](https://www.pixmind.io/posts/nano-banana-pro-pricing-guide-2026), [FLUX.2](https://docs.bfl.ai/flux_2/flux2_overview), [OpenAI imágenes](https://costgoat.com/pricing/openai-images), [comparativa julio 2026](https://www.buildmvpfast.com/api-costs/ai-image).
+
+## Decisión
+- **Principal: Nano Banana Pro.** Es la que mejor cubre las dos cosas difíciles de este proyecto al mismo tiempo: que el bordado salga igual (referencia de objeto) y que sea el mismo modelo en las 3 fotos de cada color y entre colores (referencia de personaje).
+- **Respaldo: FLUX.2 [flex]**, con el mismo adaptador `ImageProvider`.
+- **La decisión se confirma con una prueba comparativa** (tarea 8a del plan): 2 diseños reales × 3 tomas × {Nano Banana Pro, Nano Banana 2, FLUX.2 [flex]}, medidos con los umbrales del QA visual. Gana la de mayor tasa de aprobación; a igualdad, la más barata.
+
+## Flujo por llamada con multi-referencia
+Con estos modelos ya no hace falta generar primero un hoodie liso y después editarlo: cada toma se genera en una sola llamada con
+1. la foto del bordado recortada (referencia de objeto),
+2. la imagen de identidad del modelo o prenda (referencia de personaje), generada una vez por producto,
+3. el prompt y el prompt negativo del Director de arte.
+La edición con máscara queda para los reintentos cuando QA detecta que el bordado salió mal.
 
 ## Lo que ya tienes y cambia el plan
 - **Fotos reales de cada bordado** (`1. JUST PHOTOS of all designs`): el recorte conserva la textura de hilo real, así que la ruta determinística no se ve como un PNG pegado. Es también la referencia contra la que QA mide la fidelidad.
 - **Archivos de máquina** (DST, PES, etc. en `TOEmbroider/`), cuando existen: validan la forma y los colores exactos de hilo.
 - **Nada de IA en xdopestore-api**: todo el pipeline de imágenes es nuevo y vive en el servicio de agentes, no en la API de la tienda. La API solo recibe las imágenes finales por `POST /attachment` (Cloudinary, máx. 10 MB).
 
-## Recomendación: pipeline híbrido de dos rutas
-Las fotos finales **se generan con la API de imágenes** (Gemini Image como motor principal), con el prompt que escribe el Director de arte. La composición determinística queda solo como **respaldo** para una toma cuya versión generada no pase QA de fidelidad después de los reintentos; esas imágenes se marcan `fallback` para que Diego las vea.
+## Pipeline por producto
+Las fotos finales **se generan con la API de imágenes** (Nano Banana Pro), con el prompt del Director de arte. La composición determinística queda solo como **respaldo** para una toma que no pase QA de fidelidad después de los reintentos; esas imágenes se marcan `fallback`.
 
 ```
-ShotList (una toma)
+Producto
    │
    ▼
-A. Foto base: modelo o prenda con hoodie LISO del color pedido (Gemini Image),
-   usando la foto base de la primera toma como referencia de identidad para las demás
-   - Se guarda también la máscara de la zona de bordado (segmentación de la prenda)
+A. Imagen de identidad: el modelo (o la prenda) definido en el concepto, generado una vez
    │
-   ├──► B1. Ruta generativa: edición de la foto base pasando el bordado como
-   │        imagen de referencia + máscara de la zona. Prompt: "bordado de hilo
-   │        en relieve, respetar exactamente forma y colores de la referencia".
-   │
-   └──► B2. Ruta determinística: warp del recorte de la foto del bordado sobre la zona según
-            los pliegues (mapa de desplazamiento de la foto), textura de puntada,
-            sombra y luz tomadas de la foto base. Opcional: pasada de
-            "armonización" de baja intensidad SOLO en los bordes.
+   ▼  por cada toma (≥ 3 colores × ≥ 3 tomas), en paralelo
+B. Generación multi-referencia: bordado recortado (objeto) + identidad (personaje)
+   + prompt y prompt negativo → 2 candidatas
    │
    ▼
-C. QA visual mide B1 contra el original. Si falla tras 2 reintentos, usa B2 marcada `fallback`
+C. QA visual mide cada candidata contra el bordado original
+   ├─ pasa → final
+   └─ falla → reintento: edición con máscara sobre la zona del bordado, con el
+      motivo del rechazo en el prompt (máx. 2)
+             └─ sigue fallando → B2 determinística (warp del recorte de la foto
+                del bordado sobre la prenda), marcada `fallback`
 ```
 
 **Por qué así**
-- La foto base sin bordado es la parte donde la IA brilla (persona, pose, luz, tela).
-- B1 da el mejor realismo cuando funciona; B2 garantiza que siempre haya una opción fiel.
-- Mantener la misma persona entre tomas: pasar la foto base de la toma 1 como referencia de identidad para las demás.
+- Una sola llamada por toma es más barata y rápida que generar una base y luego editarla.
+- La referencia de personaje mantiene el mismo modelo en las fotos de cada color y entre colores.
+- El respaldo B2 garantiza que nunca falte una foto fiel, aunque la IA falle.
 
 ## Fase 2 (cuando el flujo funcione)
-Entrenar un **LoRA de FLUX con 20–40 fotos reales** de tus hoodies bordados. Eso enseña al modelo cómo se ve *tu* puntada y sube mucho la tasa de aprobación de B1.
+Entrenar un **LoRA de FLUX con 20–40 fotos reales** de tus hoodies bordados. Eso enseña al modelo cómo se ve *tu* puntada y sube la tasa de aprobación en el primer intento.
 
 ## Interfaz común (para cambiar de proveedor sin tocar agentes)
 ```
-generate_base(shot, seed) -> Image
-edit_with_reference(base, reference_png, mask, prompt, seed) -> Image
+generate(prompt, negative_prompt, object_refs[], character_refs[], size, seed) -> Image
+edit(image, mask, prompt, object_refs[], seed) -> Image
 ```
 Cada proveedor es un adaptador. El proveedor activo se elige por configuración, no en el código de los agentes.
 
 ## Costo estimado por producto
-9 tomas (3 colores × 3) × (1 base + 2 ediciones) ≈ 27 llamadas, más reintentos. Con precios del orden de centavos por imagen, el tope de USD 3 por producto de la constitución debería alcanzar holgado; se valida en la primera corrida real.
+1 imagen de identidad + 9 tomas + ~30 % de reintentos ≈ 13 llamadas.
+- Nano Banana Pro a 2K: ≈ USD 1.75 por producto.
+- Nano Banana 2 a 2K: ≈ USD 1.30 (≈ 0.65 en batch).
+Ambas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueba comparativa.
