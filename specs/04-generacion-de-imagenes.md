@@ -80,10 +80,10 @@ Cada proveedor es un adaptador. El proveedor activo se elige por configuración,
 - Solo Nano Banana Pro: ≈ USD 1.75.
 Todas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueba comparativa.
 
-## Reducción de costo (por defecto desde 2026-09-30)
+## Reducción de costo (aprobada por Diego el 2026-09-30)
 1. **Batch API de Gemini (50 % menos).** El proceso es automático y no hay apuro, así que las tomas se envían en batch: Nano Banana 2 a 2K baja a ≈ USD 0.05 por imagen. Los resultados llegan en horas, no en segundos; el lote espera en estado `generating`.
 2. **Modelos de la casa.** En vez de inventar un modelo por producto, se mantiene un elenco fijo de 3–4 personas (`models/` con su imagen de identidad aprobada por Diego). El Director de arte elige uno según el estilo del diseño. Ahorra la imagen de identidad por producto y da una cara de marca consistente.
 3. **Menos reintentos.** Antes de generar, el Director de arte valida el prompt contra una lista de errores conocidos, y QA corre primero los chequeos baratos (OCR, color, SSIM) y solo después el modelo de visión. Meta: bajar reintentos de ~30 % a ~15 %.
 Estimado con las tres: ≈ 10–11 imágenes × USD 0.05 ≈ **USD 0.55 por producto** (≈ USD 16 por 30 productos), más el escalamiento a Pro cuando haga falta (también en batch).
 
-**Opción a evaluar en la prueba:** FLUX.2 [pro] (≈ USD 0.03 por megapíxel) queda en un rango parecido. **Opción sin costo por imagen:** FLUX.2 [klein] 4B (licencia Apache 2.0) corre en una GPU propia de ~13 GB de VRAM; solo conviene si Diego tiene esa GPU y la calidad alcanza en la prueba.
+**Opción a evaluar en la prueba:** FLUX.2 [pro] (≈ USD 0.03 por megapíxel) queda en un rango parecido. **Descartado:** FLUX.2 [klein] local, porque la GPU de Diego no alcanza (2026-09-30).
