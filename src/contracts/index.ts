@@ -154,6 +154,8 @@ export const ShotList = z
       has_text: z.boolean(),
       best_placement: Placement,
       embroidery_size_cm: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
+      size_preset: z.string().optional(),
+      framed: z.boolean().optional(),
     }),
     concept: z.object({
       type: z.enum(["model", "flat_lay", "hanging", "ghost_mannequin"]),

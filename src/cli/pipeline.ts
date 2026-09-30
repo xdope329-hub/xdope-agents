@@ -186,6 +186,7 @@ async function processRun(runId: string, log: (m: string) => void) {
     const outcome = await track(runId, "qa", () => generateMockups({
       claude, gemini, runId, design, shotList, dir,
       ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false,
+      placementRefsDir: env.PLACEMENT_REFS_DIR ?? "config/placement-refs",
       colorDescriptions: Object.fromEntries(palette.filter((c) => c.en).map((c) => [c.name, c.en!])),
       reviewBeforeRetry: source.review_before_retry ?? true, log,
     }));

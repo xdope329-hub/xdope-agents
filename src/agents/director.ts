@@ -61,11 +61,13 @@ Reglas del producto:
   - "detail": primer plano del pecho de la persona con el hoodie puesto, del esternón a la barbilla; se ven la tela afelpada, el cuello y el borde de la capucha alrededor del bordado. Nunca un parche suelto, nunca solo tela sin prenda.
 - La MISMA persona en las 3 fotos, descrita en model_description con rasgos de la cara precisos (forma de la cara, ojos, cejas, nariz, labios, tono de piel, pelo y vello facial explícito, p. ej. "clean-shaven"). Repite esos rasgos en cada prompt. Nada de flat lay ni maniquí.
 - Elige el color de hoodie de la lista que mejor contraste con los hilos del bordado y nómbralo con su descripción en inglés en cada prompt.
-- Tamaño del bordado: elige UN tamaño estándar (size_preset). Los bordados reales en hoodie son pequeños; los modelos de imágenes tienden a agrandarlos.
-  - "pecho_izquierdo" (9 cm, pecho izquierdo): el valor por defecto para la mayoría de diseños.
-  - "centro_pequeno" (10 cm, centrado): OBLIGATORIO si el bordado tiene un MARCO o borde cuadrado, rectangular, circular u ovalado (tipo parche, estampilla o viñeta).
-  - "centro_estandar" (15 cm, centrado): diseños sin marco que necesitan más tamaño para leerse (mucho detalle o texto).
-  - "centro_grande" (20 cm, centrado): solo composiciones anchas con texto largo que no se leerían más pequeñas.
+- Tamaño del bordado: elige UN tamaño estándar (size_preset) según la FORMA del diseño. Los bordados reales en hoodie son pequeños o medianos; los modelos de imágenes tienden a agrandarlos.
+  - "pecho_izquierdo" (9 cm, pecho izquierdo): diseños redondos, compactos o sin una forma definida (una figura suelta, un sticker, un animalito, un ícono). Es el valor por defecto.
+  - "centro_pequeno" (10 cm, centrado arriba del pecho): diseños pequeños con forma definida que se leen mejor al centro.
+  - "centro_estandar" (15 cm, centrado): un personaje o figura completa con forma definida (p. ej. un personaje de cuerpo entero).
+  - "centro_grande" (20 cm, centrado): composiciones anchas (p. ej. un personaje sobre un logo alargado, un banner horizontal con texto).
+  - Si el bordado tiene MARCO (cuadrado, rectangular, circular u ovalado), siempre va centrado; el código ajusta su tamaño.
+  - Centrado significa en la parte alta del pecho, unos 8–10 cm bajo la costura del cuello, muy por encima del bolsillo canguro.
   El código escribe el tamaño exacto en cada prompt; tú describe la ubicación y que es un bordado pequeño o mediano, nunca grande.
 Cómo escribir cada prompt (en inglés, que el modelo de imágenes sigue mejor):
 - Empieza por: "Real catalog photograph, shot on a full-frame camera with an 85mm lens, of a person wearing a <color> pullover hoodie".
@@ -104,8 +106,8 @@ export async function runDirector(opts: {
       const contrast = contrastWithPalette(c.hex, palette);
       return [{ name: c.name, attribute_value_id: `trial_${c.name}`, hex: c.hex, contrast_ok: contrast >= MIN_GARMENT_CONTRAST }];
     });
-    // Con marco siempre va pequeño y centrado, lo haya elegido o no el Director.
-    const preset: SizePreset = out.analysis.framed ? "centro_pequeno" : out.analysis.size_preset;
+    // Con marco siempre va centrado: banners anchos (≥ 2:1) a 20 cm, el resto pequeño a 10 cm.
+    const preset: SizePreset = out.analysis.framed ? (aspect >= 2 ? "centro_grande" : "centro_pequeno") : out.analysis.size_preset;
     const placement = SIZE_PRESETS[preset].placement;
     const colorName = (n: string) => byName.get(n.toLowerCase())?.name ?? n;
     const counters = new Map<string, number>();
@@ -135,6 +137,8 @@ export async function runDirector(opts: {
         has_text: out.analysis.has_text,
         best_placement: placement,
         embroidery_size_cm: presetSize(preset, aspect),
+        size_preset: preset,
+        framed: out.analysis.framed,
       },
       concept: { type: "model", description: out.model_description, identity_ref: null },
       colors,

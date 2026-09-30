@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import sharp from "sharp";
@@ -35,12 +35,12 @@ const fakeClaude = (failures = 0) => {
 };
 
 function fakeGemini(batchState: { value: string }) {
-  const calls = { generate: 0, submit: [] as Array<{ keys: string[]; model: string; prompt: string }>, check: 0 };
+  const calls = { generate: 0, submit: [] as Array<{ keys: string[]; model: string; prompt: string; roles: string[] }>, check: 0 };
   const img = async (batch: boolean): Promise<GeneratedImage> => ({ data: await png(), mimeType: "image/png", model: "m", cost_usd: batch ? 0.05 : 0.1, batch });
   const gemini = {
     generate: async () => (calls.generate++, img(false)),
-    submitBatch: async (reqs: Array<{ key: string; req: { model: string; prompt: string } }>) => {
-      calls.submit.push({ keys: reqs.map((r) => r.key), model: reqs[0].req.model, prompt: reqs[0].req.prompt });
+    submitBatch: async (reqs: Array<{ key: string; req: { model: string; prompt: string; refs: Array<{ role: string }> } }>) => {
+      calls.submit.push({ keys: reqs.map((r) => r.key), model: reqs[0].req.model, prompt: reqs[0].req.prompt, roles: reqs[0].req.refs.map((r) => r.role) });
       return `batches/${calls.submit.length}`;
     },
     checkBatch: async (_job: string, keys: string[]) => {
@@ -123,5 +123,15 @@ describe("generateMockups", () => {
     await expect(decide(dir, "retry")).rejects.toThrow("No quedan reintentos");
     await decide(dir, "approve");
     expect((await generateMockups(options(gemini, claude, true, true))).kind).toBe("done");
+  });
+
+  it("agrega la foto de ejemplo de ubicación del tamaño elegido", async () => {
+    const refs = path.join(dir, "refs");
+    await mkdir(refs, { recursive: true });
+    await writeFile(path.join(refs, "pecho_izquierdo.jpg"), await png());
+    const { gemini, calls } = fakeGemini({ value: "JOB_STATE_RUNNING" });
+    const withPreset = { ...shotList, analysis: { ...shotList.analysis, size_preset: "pecho_izquierdo", framed: false } };
+    await generateMockups({ ...options(gemini), shotList: withPreset, placementRefsDir: refs });
+    expect(calls.submit[0].roles.some((r) => r.startsWith("Placement reference"))).toBe(true);
   });
 });

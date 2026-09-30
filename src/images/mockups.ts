@@ -32,6 +32,7 @@ export interface MockupOptions {
   reviewBeforeRetry: boolean;
   log: (msg: string) => void;
   colorDescriptions?: Record<string, string>; // nombre del color → descripción en inglés
+  placementRefsDir?: string; // fotos de ejemplo de ubicación y escala: <preset>.jpg y enmarcado.jpg
 }
 
 export interface Attempt {
@@ -92,6 +93,14 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
   const passed = (s: Shot) => attemptsOf(s).some((a) => a.qa?.passed);
   const identity = async (): Promise<ImageInput | null> => ((await exists(identityFile)) ? { data: await readFile(identityFile), mediaType: "image/jpeg", label: "" } : null);
 
+  // Foto de ejemplo de ubicación y escala del bordado según su tamaño estándar (o enmarcado).
+  const placementRef = await (async () => {
+    const a = o.shotList.analysis;
+    if (!o.placementRefsDir || !a.size_preset) return null;
+    const file = path.join(o.placementRefsDir, `${a.framed ? "enmarcado" : a.size_preset}.jpg`);
+    return (await exists(file)) ? await readFile(file) : null;
+  })();
+
   const request = async (shot: Shot, model: string): Promise<ImageRequest> => {
     const last = attemptsOf(shot).at(-1);
     const fix = last?.qa?.reasons.length ? `\n\nFix these problems found in the previous attempt: ${last.qa.reasons.join("; ")}` : "";
@@ -106,6 +115,9 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
           mimeType: "image/jpeg",
         },
         ...(id ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: id.data, mimeType: id.mediaType }] : []),
+        ...(placementRef
+          ? [{ role: "Placement reference: ONLY shows where the embroidery sits on the hoodie and how big it is relative to the body. Copy that position and scale. Do NOT copy its person, pose, background, garment color or design.", data: placementRef, mimeType: "image/jpeg" }]
+          : []),
       ],
       aspectRatio: "4:5",
       imageSize: o.imageSize,
@@ -258,7 +270,10 @@ export function sizeLine(shotList: ShotList, shot: Shot): string {
   if (!size) return "";
   const frameCm = shot.framing === "detail" ? 35 : 100;
   const pct = Math.max(1, Math.round((size.w / frameCm) * 100));
-  const where = shotList.analysis.best_placement === "chest_left" ? "on the left chest (wearer's left), above the heart" : "centered on the upper chest, below the neckline";
+  const where =
+    shotList.analysis.best_placement === "chest_left"
+      ? "on the wearer's left chest, about 10 cm below the shoulder seam, halfway between the center of the chest and the side"
+      : "centered on the upper chest, its top about 8–10 cm below the neckline seam, well above the kangaroo pocket";
   const feel = size.w <= 10 ? "small, about the size of a palm" : size.w <= 15 ? "medium, about the width of a hand with fingers spread" : "about the width of a sheet of letter paper";
   return `\n\nEMBROIDERY SIZE IS CRITICAL: a standard ${size.w} × ${size.h} cm embroidery (${feel}), ${where}. In this image it spans about ${pct}% of the image width. Plenty of plain hoodie fabric must be visible around it on every side. Do NOT enlarge it and never let it cover the chest from shoulder to shoulder.`;
 }

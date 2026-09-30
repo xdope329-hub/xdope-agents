@@ -67,9 +67,10 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 1. **Analiza la imagen** con un modelo de visión: qué representa el diseño, estilo (anime, gamer, minimalista…), paleta de hilos, tamaño relativo, si tiene texto y dónde va mejor (pecho izquierdo, centro, espalda).
 2. **Elige 1 color de hoodie** que contraste bien con la paleta del bordado (contraste de luminancia y ΔE suficientes para que el hilo se lea) y que exista como `attribute_value` en la API. Si Diego ya indicó un color en el brief, se respeta.
 2b. **Tamaño estándar del bordado** (constitución, regla 13; decisión de Diego, 2026-09-30). El Director elige un tamaño estándar y el código calcula ancho y alto con la proporción del diseño (lado mayor):
-   - `pecho_izquierdo` 9 cm en `chest_left`: por defecto.
-   - `centro_pequeno` 10 cm en `chest_center`: obligatorio para bordados con marco (cuadrado, rectangular, circular u ovalado, tipo parche).
-   - `centro_estandar` 15 cm y `centro_grande` 20 cm en `chest_center`: solo si el diseño necesita más tamaño para leerse.
+   - `pecho_izquierdo` 9 cm en `chest_left`: diseños redondos, compactos o sin forma definida; por defecto.
+   - `centro_pequeno` 10 cm, `centro_estandar` 15 cm (personaje o figura completa) y `centro_grande` 20 cm (composiciones anchas) en `chest_center`, arriba del pecho (8–10 cm bajo el cuello).
+   - Con marco: siempre centrado; 20 cm si es un banner ancho (≥ 2:1), si no 10 cm.
+   - Cada imagen recibe una foto de ejemplo de ubicación y escala (`config/placement-refs/<tamaño>.jpg` o `enmarcado.jpg`, fotos de Diego, no se suben al repo).
    Cada prompt de imagen da el tamaño en cm y como % del ancho de la imagen según el encuadre, exige el hoodie puesto del color pedido (también en el primer plano) y aclara que el fondo y la escala de la foto de referencia no son el producto.
 3. **Define el concepto visual**: por defecto un **modelo humano realista** (edad, estilo, rasgos, peinado) coherente con el estilo del diseño; flat lay o prenda colgada solo como toma extra, nunca como las 3 fotos de un color. El mismo modelo se usa en todas las fotos del producto.
 4. **Arma la `ShotList`**: por cada color, ≥ 3 tomas. Mínimo obligatorio por color: frontal plano medio, 3/4 o lateral, y detalle cercano del bordado.
