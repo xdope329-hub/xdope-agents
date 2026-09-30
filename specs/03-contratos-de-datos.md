@@ -25,7 +25,11 @@ Esquemas mínimos. Se implementan como JSON Schema (o Pydantic/Zod) y cada agent
   "title_options": ["Hoodie Calcifer Bordado", "Calcifer: Fuego Bordado", "Hoodie Llama Viva"],
   "title": "Hoodie Calcifer Bordado",
   "title_reason": "…",
-  "short_description": "El demonio de fuego más querido, bordado hilo a hilo para que el calor lo lleves tú."
+  "short_description": "El demonio de fuego más querido, bordado hilo a hilo para que el calor lo lleves tú.",
+  "categories": [
+    {"category_id": "…", "name": "Anime", "role": "primary", "confidence": 0.95, "reason": "personaje de Howl's Moving Castle (Studio Ghibli)"}
+  ],
+  "suggested_new_category": null
 }
 ```
 
@@ -34,7 +38,8 @@ Esquemas mínimos. Se implementan como JSON Schema (o Pydantic/Zod) y cada agent
 {
   "price": {"amount": 0, "sale_price": null},
   "size_attribute_value_ids": ["…"],
-  "category_ids": ["…"],
+  "base_category_ids": ["<id de Hoodies>"],
+  "fallback_category_id": "<id de una categoría general>",
   "garment": {"type": "hoodie", "material": "…", "weight_gsm": 0, "fit": "…"},
   "stock_per_variant": 10,
   "embroidery_placement": "chest_left"

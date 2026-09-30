@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const MIN_COLORS = 3;
 export const MIN_SHOTS_PER_COLOR = 3;
+export const MAX_SECONDARY_CATEGORIES = 2;
+export const MIN_CATEGORY_CONFIDENCE = 0.6;
 
 const hex = z.string().regex(/^#[0-9A-Fa-f]{6}$/);
 const runId = z.string().min(1);
@@ -59,10 +61,35 @@ export const CuratorPick = z
     title: z.string().min(1).max(60),
     title_reason: z.string().min(1),
     short_description: z.string().min(1).max(160),
+    categories: z
+      .array(
+        z.object({
+          category_id: z.string().min(1),
+          name: z.string().min(1),
+          role: z.enum(["primary", "secondary"]),
+          confidence: z.number().min(0).max(1),
+          reason: z.string().min(1),
+        }),
+      )
+      .min(1),
+    suggested_new_category: z.string().min(1).nullable().default(null),
   })
-  .refine((p) => p.title_options.includes(p.title), {
-    message: "El título elegido debe ser una de las 3 opciones",
-    path: ["title"],
+  .superRefine((p, ctx) => {
+    if (!p.title_options.includes(p.title)) {
+      ctx.addIssue({ code: "custom", path: ["title"], message: "El título elegido debe ser una de las 3 opciones" });
+    }
+    const primary = p.categories.filter((c) => c.role === "primary").length;
+    const secondary = p.categories.filter((c) => c.role === "secondary").length;
+    if (primary !== 1) {
+      ctx.addIssue({ code: "custom", path: ["categories"], message: `Debe haber 1 categoría principal; hay ${primary}` });
+    }
+    if (secondary > MAX_SECONDARY_CATEGORIES) {
+      ctx.addIssue({ code: "custom", path: ["categories"], message: `Máximo ${MAX_SECONDARY_CATEGORIES} categorías secundarias; hay ${secondary}` });
+    }
+    const ids = p.categories.map((c) => c.category_id);
+    if (new Set(ids).size !== ids.length) {
+      ctx.addIssue({ code: "custom", path: ["categories"], message: "Categoría repetida" });
+    }
   });
 export type CuratorPick = z.infer<typeof CuratorPick>;
 
@@ -70,7 +97,8 @@ export type CuratorPick = z.infer<typeof CuratorPick>;
 export const Defaults = z.object({
   price: z.object({ amount: z.number().positive(), sale_price: z.number().positive().nullable().default(null) }),
   size_attribute_value_ids: z.array(z.string().min(1)).min(1),
-  category_ids: z.array(z.string().min(1)).min(1),
+  base_category_ids: z.array(z.string().min(1)).default([]),
+  fallback_category_id: z.string().min(1),
   garment: z.object({
     type: z.literal("hoodie"),
     material: z.string().min(1),

@@ -22,7 +22,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 - Nunca modifica ni borra archivos de la carpeta de Diego (solo lectura).
 
 ## 1. Curador (arranque automático)
-**Rol:** iniciar cada lote sin intervención de Diego. Elige el diseño, redacta el título y la descripción corta creativa, y arma el `ProductBrief` para el resto de los agentes.
+**Rol:** iniciar cada lote sin intervención de Diego. Elige el diseño, redacta el título y la descripción corta creativa, **categoriza el producto** y arma el `ProductBrief` para el resto de los agentes.
 **Cuándo corre:** en un horario configurable (`SCHEDULE`, por defecto una vez al día) o con el comando `npm run start`. Cada ejecución inicia `PRODUCTS_PER_RUN` lotes (por defecto 1).
 **Entradas:** `designs.json`, catálogo actual de la tienda (productos, categorías, atributos), `defaults.json` y `brand-guide`.
 **Qué hace**
@@ -30,12 +30,19 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 2. **Mira la imagen** con un modelo de visión para entender qué muestra y su estilo.
 3. **Redacta el título**: corto, con gancho, ≤ 60 caracteres, que diga que es un hoodie bordado y nombre el diseño. Propone 3 opciones y elige una con su razón.
 4. **Redacta la descripción corta creativa**: 1–2 frases, ≤ 160 caracteres, con el tono de marca. Es la que va en `short_description`.
-5. **Completa el `ProductBrief`** con los valores de `defaults.json` (precio, tallas, categoría, material, stock por variante, ubicación del bordado sugerida) y un `slug` único.
+5. **Categoriza el producto** según lo que muestra el diseño (Anime, Animales, Videojuegos, etc.), eligiendo **solo entre las categorías que ya existen en la tienda** (`GET /category`):
+   - 1 categoría temática principal y, si aplica, hasta 2 secundarias (ej. un gato de anime: Anime + Animales).
+   - Cada una con confianza (0–1) y motivo.
+   - Siempre se suman las categorías base de `defaults.json` (ej. Hoodies).
+   - Si ninguna categoría existente encaja con confianza ≥ 0.6, usa la categoría de respaldo de `defaults.json` y deja una **sugerencia de categoría nueva** en el resumen del lote para que Diego la cree si quiere. El agente nunca crea categorías.
+6. **Completa el `ProductBrief`** con los valores de `defaults.json` (precio, tallas, categoría, material, stock por variante, ubicación del bordado sugerida) y un `slug` único.
 **Salida:** `CuratorPick` (diseño elegido, motivo, opciones de título, título elegido, descripción corta) + `ProductBrief`.
 **Criterios de aceptación**
 - Nunca elige un diseño que ya tiene producto, ni uno `low_res`.
 - Título ≤ 60 caracteres y descripción corta ≤ 160; ninguno inventa materiales, medidas ni licencias que no estén en `defaults.json` o la imagen.
 - `slug` único frente al catálogo existente.
+- Toda categoría asignada existe en la API; hay exactamente 1 principal y como máximo 2 secundarias.
+- Con 10 diseños de ejemplo etiquetados por Diego, la categoría principal coincide en al menos 9.
 - Tallas y categoría existen en la API. Si `defaults.json` falta o tiene un id que no existe, el lote falla con un error claro; no inventa valores.
 - Si no hay diseños `new` elegibles, termina sin crear lote y lo deja registrado.
 

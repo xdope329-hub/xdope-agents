@@ -58,6 +58,10 @@ describe("CuratorPick", () => {
     title: "Hoodie Calcifer Bordado",
     title_reason: "el más claro",
     short_description: "El demonio de fuego más querido, bordado hilo a hilo.",
+    categories: [
+      { category_id: "c_anime", name: "Anime", role: "primary", confidence: 0.95, reason: "personaje de Studio Ghibli" },
+      { category_id: "c_animales", name: "Animales", role: "secondary", confidence: 0.4, reason: "criatura" },
+    ],
   };
 
   it("acepta una elección válida", () => {
@@ -70,5 +74,20 @@ describe("CuratorPick", () => {
 
   it("rechaza una descripción corta de más de 160 caracteres", () => {
     expect(CuratorPick.safeParse({ ...pick, short_description: "x".repeat(161) }).success).toBe(false);
+  });
+
+  it("exige exactamente una categoría principal", () => {
+    const categories = pick.categories.map((c) => ({ ...c, role: "secondary" }));
+    expect(CuratorPick.safeParse({ ...pick, categories }).success).toBe(false);
+  });
+
+  it("rechaza más de 2 categorías secundarias", () => {
+    const extra = ["a", "b"].map((id) => ({ category_id: id, name: id, role: "secondary", confidence: 0.7, reason: "x" }));
+    expect(CuratorPick.safeParse({ ...pick, categories: [...pick.categories, ...extra] }).success).toBe(false);
+  });
+
+  it("rechaza categorías repetidas", () => {
+    const categories = [pick.categories[0], { ...pick.categories[0], role: "secondary" }];
+    expect(CuratorPick.safeParse({ ...pick, categories }).success).toBe(false);
   });
 });
