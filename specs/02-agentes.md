@@ -34,7 +34,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
    - 1 categoría temática principal y, si aplica, hasta 2 secundarias (ej. un gato de anime: Anime + Animales).
    - Cada una con confianza (0–1) y motivo.
    - Siempre se suman las categorías base de `defaults.json` (ej. Hoodies).
-   - Si ninguna categoría existente encaja con confianza ≥ 0.6, usa la categoría de respaldo de `defaults.json` y deja una **sugerencia de categoría nueva** en el resumen del lote para que Diego la cree si quiere. El agente nunca crea categorías.
+   - Si ninguna categoría existente encaja con confianza ≥ 0.6, usa la categoría de respaldo de `defaults.json` y propone una **categoría nueva** (`suggested_new_category`). Al publicar, si esa categoría no existe en la tienda, el Publicador la crea (`POST /category`, activa, sin padre) y la asigna al producto en lugar del respaldo (decisión de Diego, 2026-09-30). Antes de crear, busca una existente con el mismo nombre (sin importar tildes, mayúsculas ni espacios) para no duplicarla.
 6. **Completa el `ProductBrief`** con los valores de `defaults.json` (precio, tallas, categoría, material, stock por variante, ubicación del bordado sugerida) y un `slug` único.
 **Salida:** `CuratorPick` (diseño elegido, motivo, opciones de título, título elegido, descripción corta) + `ProductBrief`.
 **Criterios de aceptación**

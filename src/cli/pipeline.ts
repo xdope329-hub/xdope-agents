@@ -267,9 +267,22 @@ async function buildBrief(runId: string, curator: CuratorPick, shotList: ShotLis
   const d = defaults!;
   // Las categorías del Curador se buscan por nombre en la tienda (pudo correr con la lista de prueba).
   const storeCats = await api!.categories();
-  const byName = new Map(storeCats.map((c) => [c.name.toLowerCase(), c.id]));
-  const themeIds = curator.categories.map((c) => byName.get(c.name.toLowerCase()) ?? (c.category_id.startsWith("trial_") ? null : c.category_id)).filter((x): x is string => !!x);
-  const categoryIds = [...new Set([...d.base_category_ids, ...(themeIds.length ? themeIds : [d.fallback_category_id])])];
+  const key = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+  const byName = new Map(storeCats.map((c) => [key(c.name), c.id]));
+  const themeIds = curator.categories.map((c) => byName.get(key(c.name)) ?? (c.category_id.startsWith("trial_") ? null : c.category_id)).filter((x): x is string => !!x);
+  // Si el Curador sugirió una categoría que no existe, se crea (decisión de Diego, 2026-09-30) y reemplaza al respaldo.
+  let newCategory: string | null = null;
+  if (curator.suggested_new_category) {
+    const name = curator.suggested_new_category.trim();
+    newCategory = byName.get(key(name)) ?? null;
+    if (!newCategory) {
+      const created = await api!.request("POST", "/category", { name, slug: slug(name), status: 1, type: "product", parent_id: null });
+      newCategory = String(created?.id ?? created?._id);
+      console.log(`[${runId}] Categoría nueva creada: ${name}`);
+    }
+  }
+  const themes = [...themeIds.filter((id) => !newCategory || id !== d.fallback_category_id), ...(newCategory ? [newCategory] : [])];
+  const categoryIds = [...new Set([...d.base_category_ids, ...(themes.length ? themes : [d.fallback_category_id])])];
   const resolved = resolveColors(colorAttr, colors);
   const sizeValues = new Map((await api!.attributes()).flatMap((a) => a.attribute_values.map((v) => [v.id, v.value] as const)));
   let productSlug = slug(curator.title);
