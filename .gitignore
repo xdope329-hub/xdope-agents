@@ -4,3 +4,15 @@ config/config.json
 data/
 output/
 logs/
+runs/
+out/
+.env.*
+!.env.example
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.dst
+*.pes
+*.jef
