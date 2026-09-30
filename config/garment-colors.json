@@ -1,18 +1,8 @@
 [
   { "name": "Negro", "hex": "#151515" },
   { "name": "Blanco", "hex": "#F5F5F2" },
-  { "name": "Hueso", "hex": "#E9E1CF" },
-  { "name": "Gris jaspe", "hex": "#9A9A9A" },
-  { "name": "Gris carbón", "hex": "#3C3C3E" },
-  { "name": "Azul marino", "hex": "#1C2541" },
-  { "name": "Azul rey", "hex": "#2B4C9B" },
-  { "name": "Verde militar", "hex": "#4B5320" },
-  { "name": "Verde bosque", "hex": "#1F3D2B" },
-  { "name": "Vino", "hex": "#5E1A26" },
-  { "name": "Rojo", "hex": "#B3202A" },
-  { "name": "Café", "hex": "#5A3E2B" },
-  { "name": "Arena", "hex": "#C8B48F" },
-  { "name": "Rosa palo", "hex": "#E6C3C3" },
-  { "name": "Lila", "hex": "#B7A4CF" },
-  { "name": "Mostaza", "hex": "#C99A2E" }
+  { "name": "Gris Jaspe", "hex": "#DEDEDE" },
+  { "name": "Vino Vintage", "hex": "#CDA7D3" },
+  { "name": "Beige", "hex": "#F4DFC2" },
+  { "name": "Cafe", "hex": "#8A4242" }
 ]
