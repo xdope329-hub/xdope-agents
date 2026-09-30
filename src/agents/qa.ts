@@ -26,7 +26,7 @@ Tamaño y textura: el bordado debe verse del tamaño pedido (un bordado de pecho
 Fidelidad del bordado: compara con la referencia forma por forma y color por color. Un bordado real simplifica un poco: pequeñas diferencias de tono o de detalle fino dan 7 u 8, no menos. Menos de 7 solo si el diseño cambió de forma, se perdió o se agregó un elemento, o un color es claramente otro.
 Persona modelo: si hay imagen de identidad, compara la cara rasgo por rasgo (forma, ojos, cejas, nariz, labios, tono de piel, pelo, barba o su ausencia, edad). same_person es false si cambia cualquiera de esos rasgos de forma notoria. Una cara borrosa, de plástico o deformada baja el realismo a menos de 7.
 Cara del diseño: si el bordado tiene una cara o personaje, revisa ojos, cejas, gafas, boca, barba, tono de piel y expresión. Una cara deformada o con otra expresión baja la fidelidad a menos de 7 aunque el resto esté bien.
-Bordados con marco (cuadrado, rectangular, circular u ovalado): son piezas pequeñas de pecho izquierdo, del tamaño de un parche. Si en la foto se ven grandes o centrados, size_ok es false.
+Bordados con marco (cuadrado, rectangular, circular u ovalado): son piezas pequeñas centradas en el pecho, del tamaño de un parche. Si en la foto se ven grandes, size_ok es false.
 Tamaño: sé estricto. Si el bordado se ve claramente más grande que lo pedido, size_ok es false aunque todo lo demás esté bien.
 Da motivos concretos y accionables (qué está mal y dónde), no generalidades.`;
 
