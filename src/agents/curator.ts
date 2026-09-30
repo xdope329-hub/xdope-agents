@@ -33,7 +33,7 @@ Reglas:
 - Descripción corta: 1 o 2 frases creativas, máximo 160 caracteres, tono streetwear cercano, en español.
 - No inventes materiales, medidas, licencias ni datos que no se vean en la imagen.
 - Categorías: elige SOLO nombres de la lista dada. Exactamente 1 "primary" (la temática principal) y como máximo 2 "secondary" si aplican de verdad. Confianza entre 0 y 1.
-- Si ninguna categoría encaja con confianza de al menos ${MIN_CATEGORY_CONFIDENCE}, usa "General" como primary y propone suggested_new_category.`;
+- Si ninguna categoría encaja con confianza de al menos ${MIN_CATEGORY_CONFIDENCE}, usa la categoría de respaldo indicada como primary y propone suggested_new_category.`;
 
 export async function runCurator(opts: {
   claude: Claude;
@@ -42,6 +42,7 @@ export async function runCurator(opts: {
   design: ImageInput;
   categories: StoreCategory[];
   selectionReason: string;
+  fallbackCategory?: string;
 }): Promise<CuratorPick & { subject: string }> {
   const list = opts.categories.map((c) => `- ${c.name}`).join("\n");
   let feedback = "";

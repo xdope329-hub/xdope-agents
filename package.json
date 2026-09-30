@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p .",
@@ -12,7 +12,9 @@
     "test": "vitest run",
     "scan": "tsx --env-file-if-exists=.env src/cli/scan.ts",
     "schedule:preview": "tsx src/cli/schedule-preview.ts",
-    "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts"
+    "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts",
+    "pipeline": "tsx --env-file-if-exists=.env src/cli/pipeline.ts",
+    "schedule:install": "tsx src/cli/schedule-install.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",

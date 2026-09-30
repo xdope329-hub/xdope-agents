@@ -37,7 +37,8 @@ Cualquier estado puede pasar a `failed` (con `error.step` y `error.reason`). Un 
 
 ## Orquestación
 - Un **orquestador** (no es un agente creativo, es código) mueve el lote entre estados, guarda cada artefacto en `runs/<run_id>/` y reintenta fallas transitorias de API (3 intentos, backoff exponencial).
-- Los pasos 4–5 corren por toma en paralelo. El paso 6 corre en paralelo con 4–5 porque solo depende de `ProductBrief` y `DesignAsset`.
+- Los pasos 4–5 corren por toma en paralelo. El paso 6 corre después de QA porque escribe el alt text de las fotos aprobadas.
+- Implementación: `npm run pipeline`. Sin `--publish` el lote se detiene en `qa` con la ficha lista para revisar en `review.html`; con `--resume <run_id> --publish` continúa. Un lote `failed` se reintenta con `--resume`: vuelve al paso donde falló y reutiliza los artefactos ya guardados.
 
 ## Estructura de carpetas de un lote
 ```
@@ -68,6 +69,7 @@ Diego define cuándo corre cada tarea en `schedule.json`, sin tocar código:
 - `days`: `lun`, `mar`, `mie`, `jue`, `vie`, `sab`, `dom`. `times`: una o varias horas `HH:MM` (24 h) en `timezone`.
 - `enabled: false` pausa un horario sin borrarlo.
 - Si una ejecución sigue en curso cuando toca la siguiente del mismo horario, la nueva se salta y queda registrado; nunca se solapan.
+- En Windows, `npm run schedule:install -- --apply` registra los horarios en el Programador de tareas (`scan` → `npm run scan`, `publish` → `npm run pipeline -- --designs <products> --publish`).
 - `npm run schedule:preview` muestra las próximas 10 ejecuciones para comprobar la configuración.
 
 **Dónde corre:** `scan` necesita la carpeta de fotos, así que corre en el PC de Diego. `publish` no depende del PC (los diseños ya están en Cloudinary), así que corre en un servicio siempre encendido; por defecto un *background worker* en Render, donde ya vive xdopestore-api.

@@ -1,6 +1,8 @@
 node_modules/
 dist/
 .env
-runs/
+/runs/
 designs.json
 schedule.json
+logs/
+config/defaults.json

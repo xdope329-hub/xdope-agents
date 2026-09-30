@@ -19,10 +19,26 @@ npm run typecheck && npm test
 
 Para agregar un diseño nuevo basta con copiar su foto (JPG, PNG o WebP) en esa carpeta o en una subcarpeta y volver a escanear.
 
+## Flujo completo (hasta el producto inactivo)
+Requiere Node 22 o superior.
+
+```
+npm run scan                                         # actualiza designs.json
+npm run pipeline -- --designs 1                      # el diseño nuevo más antiguo: Curador → Director → fotos + QA → Copywriter
+npm run pipeline -- --design d_3f9a1c                # un diseño del catálogo (o una ruta a una foto)
+npm run pipeline -- --resume <run_id> --publish      # crea el producto INACTIVO en XDOPE_API_URL
+npm run pipeline -- --status                         # en qué paso va cada lote
+```
+
+Cada lote queda en `runs/<run_id>/` (`curator.json`, `shots.json`, `mockups/`, `mockups.json`, `qa.json`, `listing.json`, `brief.json`, `publish.json`, `review.html`). Si algo falla, `--resume` sigue desde el último paso guardado. `--batch` manda las fotos a Gemini Batch (mitad de precio).
+
+Para `--publish`: `XDOPE_API_URL`, `XDOPE_AGENT_EMAIL`, `XDOPE_AGENT_PASSWORD`, `XDOPE_ADMIN_URL` en `.env` y `config/defaults.json` (copia de `config/defaults.example.json` con los ids de la tienda). Los colores elegidos deben existir en el atributo "Color" de la tienda; los agentes no crean colores ni categorías. Usa la API de QA primero.
+
 ## Programar ejecuciones
 1. Copia `schedule.example.json` a `schedule.json`.
 2. Ajusta `timezone`, los días (`lun` a `dom`) y las horas (`HH:MM`) de cada tarea.
 3. Corre `npm run schedule:preview` para ver las próximas ejecuciones.
+4. En el PC con Windows, `npm run schedule:install` muestra las tareas del Programador de tareas y `npm run schedule:install -- --apply` las crea (`-- --remove` las borra). `scan` corre `npm run scan` y `publish` corre `npm run pipeline -- --designs <products> --publish`; el log queda en `logs/scheduler.log`.
 
 ## Prueba de los agentes (sin publicar en la tienda)
 Corre Curador → Director de arte → generación con Gemini → QA y deja las fotos 1080×1350 con un `review.html`.

@@ -32,7 +32,7 @@ Cada tarea termina con tests que prueban sus criterios de aceptación.
 4. Biblioteca: escaneo de `DESIGNS_DIR`, hash, `designs.json`, detección de nuevos/renombrados/duplicados/faltantes. ✅
 5. Subida de diseños nuevos a Cloudinary `xdope-designs/`.
 6. Preparación del diseño: recorte, fondo transparente, máscara, paleta, `low_res`.
-6b. Curador: elección de diseño, título, descripción corta, `ProductBrief` desde `defaults.json`.
+6b. Curador: elección de diseño, título, descripción corta, `ProductBrief` desde `defaults.json`. ✅
 
 **Fase 3: imágenes**
 7. Director de arte: análisis de imagen, elección de ≥ 3 colores con contraste, concepto, `ShotList` con prompts.
@@ -42,9 +42,9 @@ Cada tarea termina con tests que prueban sus criterios de aceptación.
 10. Respaldo determinístico (B2) marcado `fallback`.
 
 **Fase 4: tienda**
-11. Copywriter.
-12. Cliente de xdopestore-api + Publicador (QA), con idempotencia por tag `agent-run:<run_id>`.
-13. Resumen del lote `review.html` (fotos, prompts, QA, costo).
+11. Copywriter. ✅
+12. Cliente de xdopestore-api + Publicador (QA), con idempotencia por tag `agent-run:<run_id>`. ✅ (`npm run pipeline`)
+13. Resumen del lote `review.html` (fotos, prompts, QA, costo). ✅
 13b. Programación por días y horas (`schedule.json`, validación y vista previa). ✅
 13c. Proceso programador (`npm run scheduler`) conectado al escaneo y al Curador; despliegue del worker en Render.
 
