@@ -240,8 +240,10 @@ async function load() {
     const b = r.batch ? esc(r.batch.stage || "") + ": " + esc(STATE[r.batch.state] || r.batch.state) + '<div class="muted">enviado hace ' + ago(r.batch.submitted_at) + (r.batch.checked_at ? ", revisado hace " + ago(r.batch.checked_at) : "") + "</div>" : '<span class="muted">—</span>';
     const acts = [];
     if (r.has_review) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/review.html" target="_blank"><button>Ver review</button></a>');
-    if (!["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="resume" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar" : "Continuar") + "</button>");
-    if (r.has_listing && ["qa", "publishing"].includes(r.status)) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">Publicar (inactivo)</button>');
+    // Con la ficha lista, lo único pendiente es publicar: un fallo ahí solo ofrece reintentar la publicación.
+    const readyToPublish = r.has_listing && (["qa", "publishing"].includes(r.status) || (r.status === "failed" && ["qa", "publishing"].includes(r.error?.step)));
+    if (readyToPublish) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar publicación" : "Publicar (inactivo)") + "</button>");
+    else if (!["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="resume" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar" : "Continuar") + "</button>");
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
       "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
