@@ -82,7 +82,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     const id = shot === first ? null : await identity();
     return {
       model,
-      prompt: `${shot.prompt}\n\nAvoid: ${shot.negative_prompt}${fix}`,
+      prompt: `${shot.prompt}${sizeLine(o.shotList)}\n\nAvoid: ${shot.negative_prompt}${fix}`,
       refs: [
         { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: o.design.data, mimeType: "image/jpeg" },
         ...(id ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: id.data, mimeType: id.mediaType }] : []),
@@ -195,6 +195,16 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     results.push({ shot, file, attempts, passed: !!best?.qa?.passed });
   }
   return { kind: "done", results, imageCost: progress.image_cost_usd };
+}
+
+// Tamaño del bordado en términos que el modelo de imágenes respeta mejor que solo centímetros:
+// proporción del ancho del pecho (un hoodie de adulto mide unos 55 cm de ancho a la altura del pecho).
+export function sizeLine(shotList: ShotList): string {
+  const size = shotList.analysis.embroidery_size_cm;
+  if (!size) return "";
+  const pct = Math.round((size.w / 55) * 100);
+  const where = shotList.analysis.best_placement === "chest_left" ? "on the left chest (wearer's left), above the heart" : "centered on the upper chest, below the neckline";
+  return `\n\nEMBROIDERY SIZE IS CRITICAL: the embroidery measures only ${size.w} cm wide × ${size.h} cm tall, ${where}. That is about ${pct}% of the chest width${size.w <= 12 ? ", roughly the size of a palm" : ""}. Keep plenty of plain hoodie fabric visible around it. Do NOT enlarge it, do not let it cover the chest, and keep this exact size in every shot.`;
 }
 
 function bestAttempt(attempts: Attempt[]): Attempt | null {

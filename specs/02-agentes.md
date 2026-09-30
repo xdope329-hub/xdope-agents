@@ -103,10 +103,11 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 | Color de hoodie | ΔE contra el color pedido | ≤ 10 |
 | Texto inventado | OCR en la zona del bordado; si el original no tiene texto, no debe aparecer texto | 0 caracteres extra |
 | Anatomía y artefactos | Revisión con modelo de visión (manos, dedos, cara, ojos, dientes, costuras, cordones, bolsillo canguro) | sin fallas graves |
-| **Realismo del modelo** | El modelo de visión puntúa de 1 a 10 "¿pasaría por una foto real de catálogo?" con una rúbrica fija: piel, ojos, pelo, manos, caída de la tela, luz y sombras coherentes, fondo. Justifica cada punto bajo 8 | ≥ 8 |
+| **Realismo del modelo** | El modelo de visión puntúa de 1 a 10 "¿pasaría por una foto real de catálogo?" con una rúbrica fija: piel, ojos, pelo, manos, caída de la tela, luz y sombras coherentes, fondo. Justifica cada punto bajo 7 | ≥ 7 |
 | Consistencia del modelo | Misma persona que la imagen de identidad (comparación de rostro con el modelo de visión) | misma persona |
 | Ubicación | Bordado en la zona pedida | coincide |
-| Tamaño | Bordado del tamaño pedido, no gigante (regla 13) | coincide |
+| Tamaño | Bordado del tamaño pedido, no gigante (regla 13). El prompt lo da en cm y como % del ancho del pecho | coincide (estricto) |
+| Fidelidad (visión) | Puntaje 1–10 del modelo de visión; pequeñas diferencias de tono o detalle fino se toleran (decisión de Diego, 2026-09-30) | ≥ 7 |
 | Textura de bordado | Se ven puntadas, brillo del hilo y relieve; no parece estampado | visible |
 
 **Criterios de aceptación**

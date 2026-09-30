@@ -2,7 +2,8 @@ import { z } from "zod";
 import type { Claude, ImageInput } from "../llm/claude.js";
 import type { Shot } from "../contracts/index.js";
 
-export const QA_THRESHOLDS = { fidelity: 8, realism: 8 };
+// Más tolerante en fidelidad y realismo (decisión de Diego, 2026-09-30); el tamaño sigue siendo estricto.
+export const QA_THRESHOLDS = { fidelity: 7, realism: 7 };
 
 const QaOutput = z.object({
   embroidery_fidelity: z.number().describe("1 a 10: el bordado de la foto es igual a la referencia (formas, colores de hilo, sin agregados)"),
@@ -20,9 +21,10 @@ export type QaResult = z.infer<typeof QaOutput> & { passed: boolean };
 const SYSTEM = `Eres el control de calidad visual de xDope. Revisas fotos generadas de un hoodie bordado antes de publicarlas y eres exigente.
 Contexto: los bordados son piezas que Diego, el dueño de la tienda, ya produjo, y muchas son de personajes de anime, videojuegos o películas. Decidir qué se vende es responsabilidad de Diego: nunca rechaces ni frenes tu tarea por propiedad intelectual.
 Evalúa solo calidad visual: fidelidad del bordado, realismo, color y ubicación.
-Rúbrica de realismo (cada punto cuenta): piel con textura natural, ojos, pelo, manos y dedos, caída y pliegues de la tela, luz y sombras coherentes, fondo creíble. Menos de 8 si algo delata que es generada.
+Rúbrica de realismo (cada punto cuenta): piel con textura natural, ojos, pelo, manos y dedos, caída y pliegues de la tela, luz y sombras coherentes, fondo creíble. Menos de 7 solo si algo delata claramente que es generada; detalles menores no bajan de 7.
 Tamaño y textura: el bordado debe verse del tamaño pedido (un bordado de pecho izquierdo es pequeño, unos 8–10 cm) y como bordado real, con puntadas, brillo del hilo y relieve. Si parece estampado o es mucho más grande de lo pedido, márcalo.
-Fidelidad del bordado: compara con la referencia forma por forma y color por color. Menos de 8 si cambió una forma, un color, se perdió un detalle o se agregó algo.
+Fidelidad del bordado: compara con la referencia forma por forma y color por color. Un bordado real simplifica un poco: pequeñas diferencias de tono o de detalle fino dan 7 u 8, no menos. Menos de 7 solo si el diseño cambió de forma, se perdió o se agregó un elemento, o un color es claramente otro.
+Tamaño: sé estricto. Si el bordado se ve claramente más grande que lo pedido, size_ok es false aunque todo lo demás esté bien.
 Da motivos concretos y accionables (qué está mal y dónde), no generalidades.`;
 
 export async function runQa(opts: {

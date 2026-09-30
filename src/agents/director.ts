@@ -42,7 +42,7 @@ Reglas del producto:
 - Ubicación y tamaño REALES del bordado (lo produce una máquina con bastidor máximo de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm):
   - Por defecto "chest_left": pequeño en el pecho izquierdo, unos 8–10 cm de ancho (máximo ${MAX_CHEST_LEFT_CM} cm).
   - "chest_center" solo si el diseño necesita más tamaño para leerse (mucho detalle, texto o composición ancha): centrado en el pecho, entre 14 y ${MAX_HOOP_CM} cm de ancho, nunca más de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm. Nunca gigante ni ocupando todo el frente.
-  - Da el tamaño en embroidery_size_cm y escríbelo en cada prompt (p. ej. "small embroidery about 9 cm wide on the left chest").
+  - Da el tamaño en embroidery_size_cm y escríbelo en cada prompt (p. ej. "small embroidery about 9 cm wide on the left chest"). Los modelos de imágenes tienden a agrandar el bordado: prefiere el tamaño más pequeño con el que el diseño se lea bien.
 Cómo escribir cada prompt (en inglés, que el modelo de imágenes sigue mejor):
 - Empieza por: "Real catalog photograph, shot on a full-frame camera with an 85mm lens".
 - Describe a la persona modelo con los mismos rasgos en todas las tomas, la pose y el hoodie (color exacto, algodón afelpado grueso, pliegues reales).
