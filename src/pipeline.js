@@ -66,7 +66,8 @@ async function processDesign(catalog, design, brief) {
 
   const analysis = await step(path.join(dir, 'analysis.json'), () => analyze({ config, brief, design }));
   log(`#${design.id} análisis: ${analysis.motif.slice(0, 80)}… colores ${analysis.garment_colors.map((c) => c.key).join(', ')}`);
-  if (analysis.risks.ip === 'likely' || brief.ip_risk === 'likely') {
+  // ipPolicy "flag" (por defecto): solo se registra el riesgo; "reject": se descarta el diseño.
+  if (config.ipPolicy === 'reject' && (analysis.risks.ip === 'likely' || brief.ip_risk === 'likely')) {
     saveStatus(catalog, design.id, 'rejected', { reason: `Riesgo de propiedad intelectual: ${analysis.risks.notes}` });
     log(`#${design.id} descartado por riesgo de propiedad intelectual`);
     return null;
