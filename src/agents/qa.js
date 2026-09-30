@@ -1,6 +1,5 @@
 // Agente 5 — QA visual: compara cada mockup con la foto real del bordado.
 const { z } = require('zod');
-const { ask } = require('../lib/claude');
 
 const SYSTEM = `Eres el control de calidad de fotos de producto de una tienda de hoodies bordados. Recibes la FOTO REAL
 del bordado y un MOCKUP generado por IA. Sé exigente: la foto se publicará en la tienda.
@@ -22,17 +21,19 @@ const Review = z.object({
   fix: z.string(),
 });
 
-async function review({ config, brief, file, colorLabel }) {
-  const out = await ask({
+function request({ config, brief, file, colorLabel }) {
+  return {
     model: config.llm.models.default, system: SYSTEM,
     images: [
       { label: 'Foto real del bordado:', file: brief.start_image },
       { label: `Mockup (hoodie color ${colorLabel}):`, file },
     ],
     text: 'Evalúa el mockup.', schema: Review,
-  });
-  const approved = Object.values(out.scores).every((s) => s >= config.qa.minScore);
-  return { file, ...out, approved };
+  };
 }
 
-module.exports = { review };
+function finish({ config }, out) {
+  return { ...out, approved: Object.values(out.scores).every((s) => s >= config.qa.minScore) };
+}
+
+module.exports = { request, finish };

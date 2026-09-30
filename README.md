@@ -51,17 +51,23 @@ npm run scan                                       # genera data/catalog.json
 ```
 
 
-## Probar el flujo (tiempo real)
+## Probar el flujo
 
 ```bash
 npm install
 cp .env.example .env        # ANTHROPIC_API_KEY y GEMINI_API_KEY (XDOPE_* solo para publicar)
 npm run scan
-npm run pipeline -- --design 10          # un diseño concreto, sin publicar
-npm run pipeline -- --designs 2          # el Curador elige 2 diseños pendientes
-npm run pipeline -- --design 10 --publish   # además lo crea INACTIVO en XDOPE_API_URL (usar QA primero)
+npm run pipeline -- --design 10 --realtime   # prueba rápida: todo seguido, precio completo
+npm run pipeline -- --designs 3              # modo batch (50 % menos): envía el lote del Curador
+npm run pipeline -- --collect-only           # recoge lotes terminados y envía el paso siguiente
+npm run pipeline -- --status                 # en qué paso va cada diseño y qué lotes siguen abiertos
+npm run pipeline -- --publish                # crea como INACTIVOS los productos listos (usar QA primero)
 ```
 
-Resultados en `output/<id>/` (`brief.json`, `analysis.json`, `prompts.json`, `mockups/`, `qa.json`, `copy.json`).
-Si una ejecución se corta, repetir el mismo comando reanuda desde el último paso guardado.
-El modo batch (50 % más barato) está especificado pero aún no implementado; hoy todo corre en tiempo real.
+**Modo batch** (`pipeline.mode`, por defecto): cada ejecución recoge los lotes terminados de Claude y Gemini, avanza
+cada diseño y envía el lote del paso siguiente. Un diseño pasa por ~7 lotes (curador, análisis, prompts, imágenes,
+QA, imágenes del resto de colores con la misma persona, QA, textos). Los lotes suelen tardar menos de 1 h (máx. 24 h),
+así que con `--collect-only` programado cada 1–3 h un diseño queda listo en el día.
+
+Resultados en `output/<id>/` (`brief.json`, `analysis.json`, `prompts.json`, `state.json`, `mockups/`, `copy.json`).
+Si algo falla, repetir el comando continúa desde el último paso guardado.

@@ -1,6 +1,5 @@
 // Agente 0 — Curador creativo: elige diseños, imagen de partida, título, descripción corta y categorías.
 const { z } = require('zod');
-const { ask } = require('../lib/claude');
 
 const SYSTEM = `Eres el curador creativo de xDope, una marca colombiana de hoodies bordados con estética streetwear.
 Recibes fotos de diseños de bordado candidatos (cada uno con su ID y, a veces, varias fotos numeradas).
@@ -29,7 +28,7 @@ const Brief = z.object({
 
 function photosOf(d) { return [d.photo, ...(d.extra_photos || [])]; }
 
-async function curate({ config, candidates, count, existingTitles }) {
+function request({ config, candidates, count, existingTitles = [] }) {
   const { taxonomy } = config;
   const images = candidates.flatMap((d) => photosOf(d).map((file, i) => ({
     label: `Diseño ID ${d.id}${d.name ? ` ("${d.name}")` : ''} — foto ${i}`,
@@ -42,8 +41,11 @@ async function curate({ config, candidates, count, existingTitles }) {
     `Máximo ${taxonomy.maxThemesPerProduct} temas por producto. Confianza mínima ${taxonomy.minConfidence}; respaldo: ${taxonomy.fallback}.`,
     `Títulos ya usados en la tienda: ${existingTitles.length ? existingTitles.join(' | ') : '(ninguno)'}.`,
   ].join('\n');
+  return { model: config.llm.models.default, system: SYSTEM, images, text, schema: Brief };
+}
 
-  const out = await ask({ model: config.llm.models.default, system: SYSTEM, images, text, schema: Brief });
+function finish({ config, candidates, count }, out) {
+  const { taxonomy } = config;
   const valid = new Set(taxonomy.themes.map((t) => t.slug));
   const now = new Date().toISOString();
 
@@ -68,4 +70,4 @@ async function curate({ config, candidates, count, existingTitles }) {
   });
 }
 
-module.exports = { curate };
+module.exports = { request, finish };

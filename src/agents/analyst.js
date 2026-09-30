@@ -1,6 +1,5 @@
 // Agente 2 — Analista visual: describe el bordado y elige colores de prenda.
 const { z } = require('zod');
-const { ask } = require('../lib/claude');
 
 const SYSTEM = `Eres analista visual de bordados para una tienda de hoodies. A partir de la foto de un bordado real:
 - Describe el motivo con precisión (qué muestra, estilo, formas clave, texto visible literal si lo hay).
@@ -23,17 +22,20 @@ function schemaFor(colorKeys) {
   });
 }
 
-async function analyze({ config, brief, design }) {
+function request({ config, brief, design }) {
   const colors = config.garment.colors;
   const text = [
     `Diseño ID ${design.id}${design.name ? `, nombre de carpeta: "${design.name}"` : ''}. Título de producto: "${brief.title}".`,
     `Colores de prenda permitidos: ${colors.map((c) => `${c.key} (${c.label}, ${c.hex})`).join(', ')}.`,
     `Devuelve al menos ${config.garment.minColors + 1} colores ordenados por preferencia.`,
   ].join('\n');
-  const out = await ask({
+  return {
     model: config.llm.models.default, system: SYSTEM, text,
     images: [{ file: brief.start_image }], schema: schemaFor(colors.map((c) => c.key)),
-  });
+  };
+}
+
+function finish({ config, design }, out) {
   const seen = new Set();
   out.garment_colors = out.garment_colors.filter((c) => !seen.has(c.key) && seen.add(c.key));
   if (out.garment_colors.length < config.garment.minColors) {
@@ -42,4 +44,4 @@ async function analyze({ config, brief, design }) {
   return { id: design.id, ...out };
 }
 
-module.exports = { analyze };
+module.exports = { request, finish };

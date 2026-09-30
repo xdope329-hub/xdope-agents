@@ -1,9 +1,10 @@
-// Llamada a Claude con imágenes + salida JSON validada por un esquema Zod.
+// Claude: arma solicitudes con imágenes + salida JSON (esquema Zod), en tiempo real o por Message Batches (50 % menos).
 const Anthropic = require('@anthropic-ai/sdk');
 const { zodOutputFormat } = require('@anthropic-ai/sdk/helpers/zod');
 const sharp = require('sharp');
 
 let client;
+const getClient = () => (client ??= new Anthropic());
 
 // Claude no necesita más de ~1568 px por lado; reducir ahorra tokens.
 async function imageBlock(file, maxSide = 1568) {
@@ -13,22 +14,15 @@ async function imageBlock(file, maxSide = 1568) {
 }
 
 /**
- * @param {object} o
- * @param {string} o.model
- * @param {string} o.system  instrucciones fijas del agente (se cachean)
- * @param {Array<{label?: string, file: string, maxSide?: number}>} [o.images]
- * @param {string} o.text
- * @param {import('zod').ZodType} o.schema
+ * spec: { model, system, images?: [{label?, file, maxSide?}], text, schema (Zod), effort? }
  */
-async function ask({ model, system, images = [], text, schema, effort = 'medium' }) {
-  client ??= new Anthropic();
+async function buildParams({ model, system, images = [], text, schema, effort = 'medium' }) {
   const content = [];
   for (const img of images) {
     if (img.label) content.push({ type: 'text', text: img.label });
     content.push(await imageBlock(img.file, img.maxSide));
   }
   content.push({ type: 'text', text });
-
   const params = {
     model,
     max_tokens: 16000,
@@ -38,11 +32,40 @@ async function ask({ model, system, images = [], text, schema, effort = 'medium'
   };
   // Haiku 4.5 no admite `effort`.
   if (!model.startsWith('claude-haiku')) params.output_config.effort = effort;
-
-  const res = await client.messages.parse(params);
-  if (res.stop_reason === 'refusal') throw new Error(`Claude rechazó la solicitud (${res.stop_details?.category ?? 'sin categoría'})`);
-  if (!res.parsed_output) throw new Error(`Respuesta sin JSON válido (stop_reason=${res.stop_reason})`);
-  return res.parsed_output;
+  return params;
 }
 
-module.exports = { ask };
+function parseMessage(message, schema) {
+  if (message.stop_reason === 'refusal') throw new Error(`Claude rechazó la solicitud (${message.stop_details?.category ?? 'sin categoría'})`);
+  const text = message.content.find((b) => b.type === 'text')?.text;
+  if (!text) throw new Error(`Respuesta sin texto (stop_reason=${message.stop_reason})`);
+  return schema.parse(JSON.parse(text));
+}
+
+async function ask(spec) {
+  const message = await getClient().messages.create(await buildParams(spec));
+  return parseMessage(message, spec.schema);
+}
+
+// items: [{ id, spec }] → id del lote. Los id deben cumplir ^[a-zA-Z0-9_-]{1,64}$.
+async function submitBatch(items) {
+  const requests = [];
+  for (const { id, spec } of items) requests.push({ custom_id: id, params: await buildParams(spec) });
+  const batch = await getClient().messages.batches.create({ requests });
+  return batch.id;
+}
+
+// null si el lote sigue en proceso; si terminó, Map id → { message } | { error }.
+async function fetchBatch(batchId) {
+  const batch = await getClient().messages.batches.retrieve(batchId);
+  if (batch.processing_status !== 'ended') return null;
+  const out = new Map();
+  for await (const r of await getClient().messages.batches.results(batchId)) {
+    out.set(r.custom_id, r.result.type === 'succeeded'
+      ? { message: r.result.message }
+      : { error: r.result.type === 'errored' ? `${r.result.error?.error?.type ?? 'error'}: ${r.result.error?.error?.message ?? ''}` : r.result.type });
+  }
+  return out;
+}
+
+module.exports = { ask, submitBatch, fetchBatch, parseMessage };

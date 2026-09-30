@@ -197,5 +197,9 @@
     ],
     "collectEveryHours": 3
   },
-  "ipPolicy": "flag"
+  "ipPolicy": "flag",
+  "pipeline": {
+    "mode": "batch",
+    "publish": false
+  }
 }

@@ -1,6 +1,5 @@
 // Agente 3 — Director de arte: escribe los prompts de generación para cada color y toma con IA.
 const { z } = require('zod');
-const { ask } = require('../lib/claude');
 
 const SYSTEM = `Eres director de arte y fotógrafo de producto para una marca streetwear de hoodies bordados.
 Escribes prompts en inglés para un modelo de generación de imágenes que recibirá como referencia la FOTO REAL DEL
@@ -28,7 +27,7 @@ const SHOT_TEXT = {
   model_alt: 'la misma persona en otra pose (tres cuartos o de perfil), mostrando el bordado',
 };
 
-async function direct({ config, brief, analysis, colors, aiShots, feedback }) {
+function request({ config, brief, analysis, colors, aiShots, feedback }) {
   const colorInfo = colors.map((key) => {
     const c = config.garment.colors.find((x) => x.key === key);
     return `${key} (${c.label}, ${c.hex})`;
@@ -45,11 +44,12 @@ async function direct({ config, brief, analysis, colors, aiShots, feedback }) {
     feedback ? `Correcciones pedidas por QA en el intento anterior (aplícalas):\n${feedback}` : '',
   ].filter(Boolean).join('\n');
 
-  const out = await ask({
+  return {
     model: config.llm.models.default, system: SYSTEM, text,
     images: [{ label: 'Foto real del bordado:', file: brief.start_image }], schema: Prompts,
-  });
-  return out;
+  };
 }
 
-module.exports = { direct };
+const finish = (_ctx, out) => out;
+
+module.exports = { request, finish };
