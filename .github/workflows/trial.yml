@@ -7,6 +7,10 @@ on:
         description: "URLs de fotos de bordados separadas por coma. Vacío = usa las fotos de samples/"
         required: false
         default: ""
+      batch:
+        description: "Usar batch de Gemini (mitad de precio, puede tardar horas)"
+        type: boolean
+        default: false
       image_model:
         description: "Modelo de imágenes principal"
         required: false
@@ -15,7 +19,7 @@ on:
 jobs:
   trial:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,6 +33,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           IMAGE_MODEL: ${{ inputs.image_model }}
           DESIGN_URLS: ${{ inputs.design_urls }}
+          IMAGE_USE_BATCH: ${{ inputs.batch }}
         run: |
           if [ -n "$DESIGN_URLS" ]; then
             npm run trial -- "$DESIGN_URLS"

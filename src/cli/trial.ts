@@ -1,6 +1,8 @@
 // Prueba de punta a punta sin publicar: foto de bordado → Curador → Director de arte →
 // generación (Gemini) → QA → mockups 1080×1350 y un review.html para revisar.
-// Uso: npm run trial -- <ruta o URL de imagen> [...]
+// Uso: npm run trial -- [--batch] <ruta o URL de imagen> [...]
+// --batch: la primera foto (la que fija a la persona modelo) sale en modo normal y las demás
+// van en un trabajo batch de Gemini a mitad de precio; puede tardar desde minutos hasta horas.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -8,7 +10,7 @@ import { runCurator, type StoreCategory } from "../agents/curator.js";
 import { runDirector, type GarmentColor } from "../agents/director.js";
 import { runQa, type QaResult } from "../agents/qa.js";
 import type { Shot } from "../contracts/index.js";
-import { GeminiImages, type GeneratedImage } from "../images/gemini.js";
+import { GeminiImages, type GeneratedImage, type ImageRequest } from "../images/gemini.js";
 import { Claude, type ImageInput } from "../llm/claude.js";
 
 const env = process.env;
@@ -18,7 +20,9 @@ const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const CONCURRENCY = 3;
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
 
-const sources = process.argv.slice(2).flatMap((a) => a.split(/[\s,]+/)).filter(Boolean);
+const args = process.argv.slice(2);
+const BATCH = args.includes("--batch") || env.IMAGE_USE_BATCH === "true";
+const sources = args.filter((a) => a !== "--batch").flatMap((a) => a.split(/[\s,]+/)).filter(Boolean);
 if (sources.length === 0) throw new Error("Pasa al menos una ruta o URL de imagen de bordado");
 if (!env.GEMINI_API_KEY) throw new Error("Falta GEMINI_API_KEY");
 if (!env.ANTHROPIC_API_KEY) throw new Error("Falta ANTHROPIC_API_KEY");
@@ -77,30 +81,39 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
   const results: ShotResult[] = [];
   const colorName = (s: Shot) => s.color;
 
-  const generateShot = async (shot: Shot, identity: ImageInput | null): Promise<ShotResult & { image?: Buffer }> => {
+  const request = (shot: Shot, identity: ImageInput | null, model: string, fix: string): ImageRequest => ({
+    model,
+    prompt: `${shot.prompt}\n\nAvoid: ${shot.negative_prompt}${fix}`,
+    refs: [
+      { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: design.data, mimeType: "image/jpeg" },
+      ...(identity ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: identity.data, mimeType: identity.mediaType }] : []),
+    ],
+    aspectRatio: "4:5",
+    imageSize: "2K",
+  });
+
+  // `pregenerated` es el resultado del primer intento cuando ya salió en un batch.
+  const generateShot = async (
+    shot: Shot,
+    identity: ImageInput | null,
+    pregenerated?: GeneratedImage | Error,
+  ): Promise<ShotResult & { image?: Buffer }> => {
     const result: ShotResult & { image?: Buffer } = { shot, file: null, attempts: [], passed: false };
     let best: { img: GeneratedImage; qa: QaResult; score: number } | null = null;
     let fix = "";
-    for (const model of [MODEL, ESCALATION]) {
-      if (imageCost >= MAX_COST) {
+    for (const [attempt, model] of [MODEL, ESCALATION].entries()) {
+      const fromBatch = attempt === 0 ? pregenerated : undefined;
+      if (!fromBatch && imageCost >= MAX_COST) {
         result.attempts.push({ model, qa: null, error: `Tope de costo USD ${MAX_COST} alcanzado` });
         break;
       }
       try {
-        const img = await gemini.generate({
-          model,
-          prompt: `${shot.prompt}\n\nAvoid: ${shot.negative_prompt}${fix}`,
-          refs: [
-            { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: design.data, mimeType: "image/jpeg" },
-            ...(identity ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: identity.data, mimeType: identity.mediaType }] : []),
-          ],
-          aspectRatio: "4:5",
-          imageSize: "2K",
-        });
-        imageCost += img.cost_usd;
+        if (fromBatch instanceof Error) throw fromBatch;
+        const img = fromBatch ?? (await gemini.generate(request(shot, identity, model, fix)));
+        if (!fromBatch) imageCost += img.cost_usd;
         const candidate: ImageInput = { data: await sharp(img.data).jpeg({ quality: 90 }).toBuffer(), mediaType: "image/jpeg", label: "" };
         const qa = await runQa({ claude, design, candidate, identity, shot, garmentColor: colorName(shot) });
-        result.attempts.push({ model, qa });
+        result.attempts.push({ model: img.batch ? `${model} (batch)` : model, qa });
         const score = qa.embroidery_fidelity + qa.realism;
         if (!best || score > best.score) best = { img: { ...img, data: candidate.data }, qa, score };
         if (qa.passed) break;
@@ -127,9 +140,33 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
   const [first, ...rest] = shotList.shots;
   const firstResult = await generateShot(first, null);
   results.push(firstResult);
-  const identity: ImageInput | null = firstResult.image ? { data: firstResult.image, mediaType: "image/jpeg", label: "" } : null;
+  // La referencia de identidad va reducida para no inflar las solicitudes (sobre todo en batch).
+  const identity: ImageInput | null = firstResult.image
+    ? { data: await sharp(firstResult.image).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer(), mediaType: "image/jpeg", label: "" }
+    : null;
+  let pregenerated = new Map<string, GeneratedImage | Error>();
+  if (BATCH && rest.length > 0) {
+    log(`Enviando ${rest.length} fotos en batch (mitad de precio; puede tardar)…`);
+    pregenerated = await gemini
+      .generateBatch(
+      rest.map((shot) => ({ key: shot.shot_id, req: request(shot, identity, MODEL, "") })),
+      {
+        displayName: `${trialId}-${designId}`,
+        onCreated: (name) => {
+          log(`  trabajo batch: ${name}`);
+          void writeFile(path.join(dir, "batch-job.txt"), name + "\n");
+        },
+        log,
+      },
+      )
+      .catch((err) => {
+        log(`  El batch falló (${err instanceof Error ? err.message : String(err)}); sigo en modo normal`);
+        return new Map<string, GeneratedImage | Error>();
+      });
+    for (const r of pregenerated.values()) if (!(r instanceof Error)) imageCost += r.cost_usd;
+  }
   for (let i = 0; i < rest.length; i += CONCURRENCY) {
-    results.push(...(await Promise.all(rest.slice(i, i + CONCURRENCY).map((s) => generateShot(s, identity)))));
+    results.push(...(await Promise.all(rest.slice(i, i + CONCURRENCY).map((s) => generateShot(s, identity, pregenerated.get(s.shot_id))))));
   }
 
   const passed = results.filter((r) => r.passed).length;
@@ -142,6 +179,7 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
     concept: shotList.concept.description,
     shots: results.map(({ shot, file, attempts, passed }) => ({ shot_id: shot.shot_id, color: shot.color, framing: shot.framing, prompt: shot.prompt, file, passed, attempts })),
     image_cost_usd: Number(imageCost.toFixed(3)),
+    batch: BATCH,
   };
   await writeFile(path.join(dir, "qa.json"), JSON.stringify(summary, null, 2));
   return summary;
@@ -173,7 +211,7 @@ ${d.curator.franchise_reference ? `<p><b>Referencia a franquicia:</b> ${esc(d.cu
 <p><b>Otros títulos:</b> ${d.curator.title_options.filter((t: string) => t !== d.curator.title).map(esc).join(" · ")}</p>
 <p><b>Colores:</b> ${d.colors.map((c: any) => `<span class="sw" style="background:${c.hex}"></span>${esc(c.name)}`).join(" ")}</p>
 <p><b>Modelo:</b> ${esc(d.concept)}</p>
-<p><b>Costo imágenes:</b> USD ${d.image_cost_usd.toFixed(2)}</p></div></div>
+<p><b>Costo imágenes:</b> USD ${d.image_cost_usd.toFixed(2)}${d.batch ? " (con batch)" : ""}</p></div></div>
 <div class="grid">${shots}</div></section>`;
     })
     .join("\n");

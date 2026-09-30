@@ -30,4 +30,6 @@ Corre Curador → Director de arte → generación con Gemini → QA y deja las 
 - **En GitHub:** pestaña Actions → "Prueba de agentes" → Run workflow. Pega URLs de fotos de bordados separadas por coma, o deja vacío para usar las fotos de `samples/`. Necesita los secrets `ANTHROPIC_API_KEY` y `GEMINI_API_KEY`. El resultado se descarga como artefacto `resultados-prueba`.
 - **En tu PC:** pon `ANTHROPIC_API_KEY` y `GEMINI_API_KEY` en `.env` y corre `npm run trial -- "ruta/a/bordado.jpg"`. El resultado queda en `runs/trial-.../review.html`.
 
-Costo aproximado por diseño: USD 1–1.5 en imágenes (Nano Banana 2 a 2K, reintento con Nano Banana Pro) más unos centavos de Claude.
+Con `--batch` (`npm run trial -- --batch "ruta.jpg"`) la primera foto sale al momento y las demás van en un batch de Gemini a mitad de precio: el comando se queda esperando y muestra el estado cada vez que cambia. Puede tardar desde minutos hasta horas.
+
+Costo aproximado por diseño: USD 1–1.5 en modo normal, ≈ USD 0.60–0.80 con batch en imágenes (Nano Banana 2 a 2K, reintento con Nano Banana Pro) más unos centavos de Claude.
