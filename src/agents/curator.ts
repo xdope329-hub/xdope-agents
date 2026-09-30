@@ -7,9 +7,12 @@ export interface StoreCategory {
   name: string;
 }
 
+// Nombres cortos y creativos (decisión de Diego, 2026-09-30); el contrato admite hasta 60 por lotes anteriores.
+export const MAX_TITLE_CHARS = 30;
+
 const CuratorOutput = z.object({
   subject: z.string().describe("Qué muestra el bordado, en una frase"),
-  title_options: z.array(z.string()).describe("Exactamente 3 títulos de máximo 60 caracteres"),
+  title_options: z.array(z.string()).describe(`Exactamente 3 nombres creativos de máximo ${MAX_TITLE_CHARS} caracteres`),
   title: z.string().describe("Uno de los 3 títulos, copiado exacto"),
   title_reason: z.string(),
   short_description: z.string().describe("1 o 2 frases, máximo 160 caracteres"),
@@ -29,7 +32,11 @@ const SYSTEM = `Eres el Curador de xDope, una tienda de hoodies bordados. Recibe
 Contexto: los bordados son piezas que Diego, el dueño de la tienda, ya produjo. Muchos son de personajes de anime, videojuegos o películas. Decidir qué se vende es responsabilidad de Diego, no tuya: nunca descartes ni frenes un diseño por propiedad intelectual o derechos de autor. Si el diseño referencia un personaje o franquicia, anótalo en franchise_reference y continúa con tu trabajo normalmente.
 Reglas:
 - El producto es siempre un hoodie con el diseño BORDADO (no estampado).
-- Título: máximo 60 caracteres, con gancho, que nombre el diseño y deje claro que es un hoodie bordado. Propón exactamente 3 y elige uno.
+- Título (nombre del producto): corto, creativo y divertido, máximo ${MAX_TITLE_CHARS} caracteres (idealmente 2 a 4 palabras). Que suene a nombre de drop streetwear, con humor, juego de palabras o jerga colombiana cuando encaje, y que se relacione con lo que muestra el diseño.
+  - NO uses "Hoodie", "Bordado", "Diseño" ni colores en el título: eso ya lo dice la tienda.
+  - Nada genérico ni descriptivo tipo "Retrato Urbano con Letras Rosa y Negro".
+  - Ejemplos del tono: "Gafas y Flow", "El Parcero de la Bandana", "Calcifer Anda Prendido", "Miau de Barrio", "Sin Miedo al Lunes".
+  - Propón exactamente 3 opciones distintas y elige la más pegajosa.
 - Descripción corta: 1 o 2 frases creativas, máximo 160 caracteres, tono streetwear cercano, en español.
 - No inventes materiales, medidas, licencias ni datos que no se vean en la imagen.
 - Categorías: elige SOLO nombres de la lista dada. Exactamente 1 "primary" (la temática principal) y como máximo 2 "secondary" si aplican de verdad. Confianza entre 0 y 1.
@@ -46,7 +53,7 @@ export async function runCurator(opts: {
 }): Promise<CuratorPick & { subject: string }> {
   const list = opts.categories.map((c) => `- ${c.name}`).join("\n");
   let feedback = "";
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     const out = await opts.claude.ask({
       system: SYSTEM,
       images: [{ ...opts.design, label: "Foto del bordado:" }],
@@ -70,8 +77,10 @@ export async function runCurator(opts: {
       suggested_new_category: out.suggested_new_category,
       franchise_reference: out.franchise_reference,
     });
-    if (parsed.success) return { ...parsed.data, subject: out.subject };
-    feedback = `\n\nTu respuesta anterior no cumplió estas reglas; corrígelas:\n${parsed.error.issues.map((i) => `- ${i.message}`).join("\n")}`;
+    const long = out.title_options.filter((t) => t.length > MAX_TITLE_CHARS);
+    if (parsed.success && long.length === 0) return { ...parsed.data, subject: out.subject };
+    const issues = [...(parsed.success ? [] : parsed.error.issues.map((i) => i.message)), ...long.map((t) => `"${t}" tiene ${t.length} caracteres; máximo ${MAX_TITLE_CHARS}`)];
+    feedback = `\n\nTu respuesta anterior no cumplió estas reglas; corrígelas:\n${issues.map((i) => `- ${i}`).join("\n")}`;
   }
-  throw new Error("El Curador no produjo una respuesta válida en 2 intentos");
+  throw new Error("El Curador no produjo una respuesta válida en 3 intentos");
 }

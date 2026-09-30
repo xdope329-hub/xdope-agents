@@ -28,7 +28,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Qué hace**
 1. **Elige una imagen** entre los diseños `new` que no tengan producto. Criterios, en orden: no es `low_res`; no se parece a un producto ya publicado (comparación de embeddings de imagen); alterna temas y estilos respecto a los últimos 5 lotes; a igualdad, el más antiguo primero. Guarda el motivo de la elección.
 2. **Mira la imagen** con un modelo de visión para entender qué muestra y su estilo.
-3. **Redacta el título**: corto, con gancho, ≤ 60 caracteres, que diga que es un hoodie bordado y nombre el diseño. Propone 3 opciones y elige una con su razón.
+3. **Redacta el título** (nombre del producto): corto, creativo y divertido, ≤ 30 caracteres (2 a 4 palabras), con humor, juego de palabras o jerga colombiana, relacionado con el diseño. No repite "Hoodie", "Bordado" ni colores, y nada genérico tipo "Retrato Urbano con Letras Rosa y Negro" (decisión de Diego, 2026-09-30). Propone 3 opciones y elige una con su razón.
 4. **Redacta la descripción corta creativa**: 1–2 frases, ≤ 160 caracteres, con el tono de marca. Es la que va en `short_description`.
 5. **Categoriza el producto** según lo que muestra el diseño (Anime, Animales, Videojuegos, etc.), eligiendo **solo entre las categorías que ya existen en la tienda** (`GET /category`):
    - 1 categoría temática principal y, si aplica, hasta 2 secundarias (ej. un gato de anime: Anime + Animales).
@@ -39,7 +39,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Salida:** `CuratorPick` (diseño elegido, motivo, opciones de título, título elegido, descripción corta) + `ProductBrief`.
 **Criterios de aceptación**
 - Nunca elige un diseño que ya tiene producto, ni uno `low_res`.
-- Título ≤ 60 caracteres y descripción corta ≤ 160; ninguno inventa materiales, medidas ni licencias que no estén en `defaults.json` o la imagen.
+- Título ≤ 30 caracteres y descripción corta ≤ 160; ninguno inventa materiales, medidas ni licencias que no estén en `defaults.json` o la imagen.
 - `slug` único frente al catálogo existente.
 - Toda categoría asignada existe en la API; hay exactamente 1 principal y como máximo 2 secundarias.
 - Con 10 diseños de ejemplo etiquetados por Diego, la categoría principal coincide en al menos 9.
