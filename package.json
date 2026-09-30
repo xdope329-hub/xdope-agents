@@ -10,9 +10,9 @@
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
     "test": "vitest run",
-    "scan": "tsx --env-file=.env src/cli/scan.ts",
+    "scan": "tsx --env-file-if-exists=.env src/cli/scan.ts",
     "schedule:preview": "tsx src/cli/schedule-preview.ts",
-    "trial": "tsx src/cli/trial.ts"
+    "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",
