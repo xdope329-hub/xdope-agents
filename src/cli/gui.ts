@@ -80,6 +80,8 @@ async function runsSummary() {
       title: curator?.title ?? null,
       quality: source?.quality ?? "media",
       batch: qa ? null : (progress?.batch ?? null),
+      awaiting_review: qa ? null : (progress?.awaiting_review ?? null),
+      has_progress: !!progress,
       approved: qa ? `${qa.results.filter((x: { passed: boolean }) => x.passed).length}/${qa.results.length}` : null,
       image_cost_usd: qa?.image_cost_usd ?? progress?.image_cost_usd ?? null,
       has_listing: await exists(path.join(dir, "listing.json")),
@@ -143,7 +145,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string }): string[] {
+function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean }): string[] {
   const runId = (id?: string) => {
     if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) throw new Error("run_id inválido");
     return id;
@@ -152,12 +154,16 @@ function actionArgs(body: { action?: string; run_id?: string; count?: number; ba
     case "new": {
       const n = Math.floor(Number(body.count ?? 1));
       if (!(n >= 1 && n <= 20)) throw new Error("Cantidad entre 1 y 20");
-      return ["--designs", String(n), "--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : [])];
+      return ["--designs", String(n), "--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : []), ...(body.review === false ? ["--auto-retries"] : [])];
     }
     case "collect":
       return ["--collect"];
     case "resume":
       return ["--resume", runId(body.run_id)];
+    case "approve":
+      return ["--approve", runId(body.run_id)];
+    case "retry":
+      return ["--retry", runId(body.run_id)];
     case "publish":
       return ["--resume", runId(body.run_id), "--publish"];
     default:
@@ -209,6 +215,7 @@ pre{white-space:pre-wrap;margin:0;max-height:320px;overflow:auto;font-size:12px}
   <label>Nuevo lote: <input type="number" id="count" min="1" max="20" value="1"></label>
   <label>Calidad: <select id="quality"><option value="baja" selected>baja</option><option value="media">media</option><option value="alta">alta</option></select></label>
   <label><input type="checkbox" id="batch" checked> batch (mitad de precio)</label>
+  <label title="Si QA rechaza fotos, el lote espera a que las revises antes de gastar en reintentos"><input type="checkbox" id="review" checked> revisar antes de reintentar</label>
   <button id="new">Crear</button>
   <span class="muted">|</span>
   <button id="refresh">Actualizar</button>
@@ -242,12 +249,20 @@ async function load() {
     if (r.has_review) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/review.html" target="_blank"><button>Ver review</button></a>');
     // Con la ficha lista, lo único pendiente es publicar: un fallo ahí solo ofrece reintentar la publicación.
     const readyToPublish = r.has_listing && (["qa", "publishing"].includes(r.status) || (r.status === "failed" && ["qa", "publishing"].includes(r.error?.step)));
-    if (readyToPublish) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar publicación" : "Publicar (inactivo)") + "</button>");
+    const a = r.awaiting_review;
+    const failedAtQa = r.status === "failed" && r.error?.step === "qa" && r.has_progress && !r.has_listing;
+    if (a || failedAtQa) {
+      acts.push('<button class="primary" data-act="approve" data-run="' + esc(r.run_id) + '">Fotos OK</button>');
+      if (a?.can_retry) acts.push('<button data-act="retry" data-run="' + esc(r.run_id) + '">Hacer reintentos (~USD ' + Number(a.retry_cost_usd).toFixed(2) + ")</button>");
+    }
+    if (a) {
+      // nada más: el lote espera la decisión
+    } else if (readyToPublish) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar publicación" : "Publicar (inactivo)") + "</button>");
     else if (!["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="resume" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar" : "Continuar") + "</button>");
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
       "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
-      '<td><span class="badge s-' + esc(r.status) + '">' + esc(r.status) + "</span></td><td>" + b + "</td><td>" + esc(r.approved ?? "—") + "</td><td>" + (r.image_cost_usd != null ? "USD " + Number(r.image_cost_usd).toFixed(2) : "—") + '</td><td><div class="actions">' + acts.join("") + "</div></td></tr>";
+      '<td><span class="badge s-' + (a ? "qa" : esc(r.status)) + '">' + (a ? "revisión pendiente" : esc(r.status)) + "</span>" + (a ? '<div class="muted">QA rechazó: ' + esc(a.rejected.join(", ")) + "</div>" : "") + "</td><td>" + b + "</td><td>" + esc(r.approved ?? "—") + "</td><td>" + (r.image_cost_usd != null ? "USD " + Number(r.image_cost_usd).toFixed(2) : "—") + '</td><td><div class="actions">' + acts.join("") + "</div></td></tr>";
   }).join("") : '<tr><td colspan=7 class="muted">Aún no hay lotes. Crea uno con el botón de arriba.</td></tr>';
 }
 
@@ -280,9 +295,10 @@ $("check").onclick = async () => {
   $("check").disabled = false;
 };
 $("collect").onclick = () => act({ action: "collect" });
-$("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value });
+$("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value, review: $("review").checked });
 $("refresh").onclick = () => load().catch((e) => msg(e.message, true));
 $("runs").onclick = (e) => { const b = e.target.closest("[data-act]"); if (!b) return;
+  if (b.dataset.act === "approve" && !confirm("¿Aprobar las fotos actuales de " + b.dataset.run + " por encima de QA? Revisa antes el review.")) return;
   if (b.dataset.act === "publish" && !confirm("¿Crear el producto INACTIVO en la tienda para " + b.dataset.run + "?")) return;
   act({ action: b.dataset.act, run_id: b.dataset.run }); };
 

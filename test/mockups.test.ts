@@ -5,7 +5,7 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ShotList } from "../src/contracts/index.js";
 import type { GeminiImages, GeneratedImage } from "../src/images/gemini.js";
-import { generateMockups, readProgress, type MockupOptions } from "../src/images/mockups.js";
+import { decide, generateMockups, readProgress, type MockupOptions } from "../src/images/mockups.js";
 import type { Claude } from "../src/llm/claude.js";
 
 let dir: string;
@@ -52,9 +52,9 @@ function fakeGemini(batchState: { value: string }) {
   return { gemini, calls };
 }
 
-const options = (gemini: GeminiImages, claude = fakeClaude(), batch = true): MockupOptions => ({
+const options = (gemini: GeminiImages, claude = fakeClaude(), batch = true, reviewBeforeRetry = false): MockupOptions => ({
   claude, gemini, runId: "r1", design: { data: Buffer.from(""), mediaType: "image/jpeg", label: "" }, shotList, dir,
-  model: "flash", retryModel: "pro", imageSize: "2K", maxCostUsd: 3, outSize: [40, 50], batch, waitForBatch: false, log: () => {},
+  model: "flash", retryModel: "pro", imageSize: "2K", maxCostUsd: 3, outSize: [40, 50], batch, waitForBatch: false, reviewBeforeRetry, log: () => {},
 });
 
 describe("generateMockups", () => {
@@ -94,5 +94,34 @@ describe("generateMockups", () => {
     expect(done.kind).toBe("done");
     expect(calls.generate).toBe(3);
     expect(calls.submit).toHaveLength(0);
+  });
+
+  it("con revisión: se detiene antes de reintentar y Diego aprueba por encima de QA sin gastar más", async () => {
+    const { gemini, calls } = fakeGemini({ value: "JOB_STATE_SUCCEEDED" });
+    const claude = fakeClaude(1); // QA rechaza la primera foto
+    const paused = await generateMockups(options(gemini, claude, true, true));
+    if (paused.kind !== "review") throw new Error("debía esperar revisión");
+    expect(paused.awaiting).toMatchObject({ rejected: ["n-1"], can_retry: true });
+    expect(calls.submit).toHaveLength(2);
+
+    await decide(dir, "approve");
+    const done = await generateMockups(options(gemini, claude, true, true));
+    if (done.kind !== "done") throw new Error("debía terminar");
+    expect(done.results.every((r) => r.passed)).toBe(true);
+    expect(calls.submit).toHaveLength(2);
+  });
+
+  it("con revisión: Diego pide reintentos y, si aún falla, puede aprobar", async () => {
+    const { gemini, calls } = fakeGemini({ value: "JOB_STATE_SUCCEEDED" });
+    const claude = fakeClaude(4); // QA rechaza n-1, n-2, n-3 y el reintento de n-1
+    expect((await generateMockups(options(gemini, claude, true, true))).kind).toBe("review");
+    await decide(dir, "retry");
+    const again = await generateMockups(options(gemini, claude, true, true));
+    if (again.kind !== "review") throw new Error("debía volver a esperar revisión");
+    expect(calls.submit.map((c) => c.model)).toEqual(["flash", "flash", "pro"]);
+    expect(again.awaiting.can_retry).toBe(false);
+    await expect(decide(dir, "retry")).rejects.toThrow("No quedan reintentos");
+    await decide(dir, "approve");
+    expect((await generateMockups(options(gemini, claude, true, true))).kind).toBe("done");
   });
 });

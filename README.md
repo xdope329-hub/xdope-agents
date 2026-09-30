@@ -36,6 +36,7 @@ npm run gui                       # abre el panel
 ## Panel (`npm run gui`)
 
 - **Revisar batches:** consulta a Gemini el estado de cada batch pendiente y lo muestra (en cola, procesando, terminado…). Si alguno terminó, recoge los resultados en segundo plano: QA, reintentos, Copywriter.
+- **Revisión antes de reintentar** (activada por defecto al crear): si QA rechaza fotos, el lote queda en "revisión pendiente" sin gastar más. Revisa el review y elige **Fotos OK** (aprueba las fotos actuales por encima de QA) o **Hacer reintentos** (los reintentos configurados, con su costo estimado). Un lote que falló en QA también ofrece **Fotos OK**.
 - **Recoger y continuar lotes:** lo mismo que `npm run pipeline -- --collect`.
 - **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo, con la calidad elegida (baja 1K por defecto, media 2K, alta 2K + reintento con Pro). Con "batch" (por defecto) todas las fotos van a Gemini Batch a mitad de precio en tres pasos (primera foto → las otras dos → reintentos); la acción termina enseguida y cada paso se recoge con "Revisar batches".
 - Por lote: **Ver review**, **Continuar / Reintentar**, **Publicar (inactivo)** y **Abrir en admin**.

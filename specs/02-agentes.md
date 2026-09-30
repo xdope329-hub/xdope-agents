@@ -111,7 +111,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 | Textura de bordado | Se ven puntadas, brillo del hilo y relieve; no parece estampado | visible |
 
 **Criterios de aceptación**
-- Rechaza con motivo concreto; si ninguna candidata pasa, pide reintento al paso 4 con el motivo en el prompt (máx. 2 reintentos por toma), luego marca la toma para revisión humana.
+- Rechaza con motivo concreto. Por defecto el lote se detiene en "revisión pendiente" antes de gastar en reintentos: Diego aprueba las fotos actuales por encima de QA o pide el reintento configurado (1 por toma, con el motivo en el prompt). Con `--auto-retries` reintenta sin preguntar (decisión de Diego, 2026-09-30).
 
 ## 6. Copywriter
 **Rol:** escribir la ficha de producto.

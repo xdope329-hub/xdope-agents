@@ -28,6 +28,8 @@ export interface MockupOptions {
   batch: boolean;
   // true: espera el batch aquí (trial). false: si sigue pendiente devuelve "waiting" y se recoge en otra corrida.
   waitForBatch: boolean;
+  // true: si QA rechaza fotos, se detiene y espera la decisión de Diego (aprobar o reintentar) antes de gastar en reintentos.
+  reviewBeforeRetry: boolean;
   log: (msg: string) => void;
 }
 
@@ -61,9 +63,22 @@ export interface Progress {
   attempts: Record<string, Attempt[]>; // por shot_id
   batch: PendingBatch | null;
   image_cost_usd: number;
+  // Decisión de Diego tras revisar: "approve" aprueba las fotos actuales por encima de QA; "retry" lanza los reintentos.
+  decision?: "approve" | "retry" | null;
+  awaiting_review?: AwaitingReview | null;
 }
 
-export type MockupOutcome = { kind: "done"; results: ShotResult[]; imageCost: number } | { kind: "waiting"; job: string; state: string };
+export interface AwaitingReview {
+  rejected: string[]; // fotos que QA no aprobó
+  can_retry: boolean;
+  retry_cost_usd: number;
+  since: string;
+}
+
+export type MockupOutcome =
+  | { kind: "done"; results: ShotResult[]; imageCost: number }
+  | { kind: "waiting"; job: string; state: string }
+  | { kind: "review"; results: ShotResult[]; imageCost: number; awaiting: AwaitingReview };
 
 export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> {
   await mkdir(path.join(o.dir, "mockups"), { recursive: true });
@@ -120,19 +135,43 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     }
   };
 
-  // Siguiente etapa pendiente, o null si ya no queda nada por generar.
-  const nextStage = (): { stage: string; shots: Shot[]; model: string } | null => {
+  // Siguiente etapa pendiente, una pausa para que Diego revise, o null si ya no queda nada por generar.
+  const nextStage = (): { stage: string; shots: Shot[]; model: string } | { review: AwaitingReview } | null => {
     if (attemptsOf(first).length === 0) return { stage: "primera foto", shots: [first], model: o.model };
     const pending = rest.filter((s) => attemptsOf(s).length === 0);
     if (pending.length) return { stage: "fotos restantes", shots: pending, model: o.model };
-    const retry = o.shotList.shots.filter((s) => !passed(s) && attemptsOf(s).length < MAX_ATTEMPTS);
-    if (!retry.length) return null;
+    if (progress.decision === "approve") return null;
+    const rejected = o.shotList.shots.filter((s) => !passed(s));
+    if (!rejected.length) return null;
+    const retry = rejected.filter((s) => attemptsOf(s).length < MAX_ATTEMPTS);
     const cost = retry.length * imagePrice(o.retryModel, o.imageSize, o.batch);
-    if (progress.image_cost_usd + cost > o.maxCostUsd) {
-      o.log(`  Sin reintentos: superarían el tope de USD ${o.maxCostUsd} (van USD ${progress.image_cost_usd.toFixed(2)})`);
+    const canRetry = retry.length > 0 && progress.image_cost_usd + cost <= o.maxCostUsd;
+    if (o.reviewBeforeRetry && progress.decision !== "retry") {
+      return { review: { rejected: rejected.map((s) => s.shot_id), can_retry: canRetry, retry_cost_usd: Number(cost.toFixed(3)), since: new Date().toISOString() } };
+    }
+    if (!canRetry) {
+      if (retry.length) o.log(`  Sin reintentos: superarían el tope de USD ${o.maxCostUsd} (van USD ${progress.image_cost_usd.toFixed(2)})`);
       return null;
     }
+    progress.decision = null; // la decisión de reintentar se usa una vez
     return { stage: "reintentos", shots: retry, model: o.retryModel };
+  };
+
+  // Foto final por toma: el mejor intento, recortado a outSize. Con "approve", las fotos que existen quedan aprobadas.
+  const finalize = async (): Promise<ShotResult[]> => {
+    const results: ShotResult[] = [];
+    for (const shot of o.shotList.shots) {
+      const attempts = attemptsOf(shot);
+      const best = bestAttempt(attempts);
+      let file: string | null = null;
+      if (best?.candidate) {
+        file = `mockups/${shot.shot_id}.jpg`;
+        const [w, h] = o.outSize;
+        await writeFile(path.join(o.dir, file), await sharp(path.join(o.dir, best.candidate)).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer());
+      }
+      results.push({ shot, file, attempts, passed: !!best?.qa?.passed || (progress.decision === "approve" && !!file) });
+    }
+    return results;
   };
 
   for (;;) {
@@ -160,6 +199,13 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
 
     const next = nextStage();
     if (!next) break;
+    if ("review" in next) {
+      progress.awaiting_review = next.review;
+      await save();
+      o.log(`QA rechazó ${next.review.rejected.length} foto(s); esperando tu revisión (aprobar o reintentar)`);
+      return { kind: "review", results: await finalize(), imageCost: progress.image_cost_usd, awaiting: next.review };
+    }
+    progress.awaiting_review = null;
     if (o.batch) {
       o.log(`Enviando batch de ${next.stage} (${next.shots.length} foto${next.shots.length > 1 ? "s" : ""})…`);
       const requests = await Promise.all(next.shots.map(async (s) => ({ key: s.shot_id, req: await request(s, next.model) })));
@@ -181,20 +227,9 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     await save();
   }
 
-  // Foto final por toma: el mejor intento, recortado a outSize.
-  const results: ShotResult[] = [];
-  for (const shot of o.shotList.shots) {
-    const attempts = attemptsOf(shot);
-    const best = bestAttempt(attempts);
-    let file: string | null = null;
-    if (best?.candidate) {
-      file = `mockups/${shot.shot_id}.jpg`;
-      const [w, h] = o.outSize;
-      await writeFile(path.join(o.dir, file), await sharp(path.join(o.dir, best.candidate)).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer());
-    }
-    results.push({ shot, file, attempts, passed: !!best?.qa?.passed });
-  }
-  return { kind: "done", results, imageCost: progress.image_cost_usd };
+  progress.awaiting_review = null;
+  await save();
+  return { kind: "done", results: await finalize(), imageCost: progress.image_cost_usd };
 }
 
 // Los bordados suelen ser personajes o retratos: la cara es lo primero que se deforma.
@@ -222,6 +257,16 @@ export function sizeLine(shotList: ShotList): string {
 function bestAttempt(attempts: Attempt[]): Attempt | null {
   const score = (a: Attempt) => (a.qa ? (a.qa.passed ? 100 : 0) + a.qa.embroidery_fidelity + a.qa.realism : -1);
   return attempts.filter((a) => a.candidate).sort((a, b) => score(b) - score(a))[0] ?? null;
+}
+
+// Guarda la decisión de Diego para que la próxima corrida la aplique.
+export async function decide(dir: string, decision: "approve" | "retry") {
+  const p = await readProgress(dir);
+  if (!p?.awaiting_review) throw new Error("Este lote no está esperando revisión");
+  if (decision === "retry" && !p.awaiting_review.can_retry) throw new Error("No quedan reintentos posibles (ya se hicieron o superan el tope de costo)");
+  p.decision = decision;
+  p.awaiting_review = null;
+  await writeFile(path.join(dir, "mockups", "progress.json"), JSON.stringify(p, null, 2));
 }
 
 export async function readProgress(dir: string): Promise<Progress | null> {

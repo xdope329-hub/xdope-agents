@@ -81,9 +81,10 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
     outSize: [OUT_W, OUT_H],
     batch: BATCH,
     waitForBatch: true,
+    reviewBeforeRetry: false,
     log,
   });
-  if (outcome.kind !== "done") throw new Error("El batch no terminó");
+  if (outcome.kind !== "done") throw new Error("La generación no terminó");
   const { results, imageCost } = outcome;
 
   const passed = results.filter((r) => r.passed).length;

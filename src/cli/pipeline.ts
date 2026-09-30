@@ -6,12 +6,15 @@
 //   npm run pipeline -- --resume <run_id>[,…]          continúa (o reintenta) lotes existentes
 //   npm run pipeline -- --status                       muestra en qué paso va cada lote
 //   npm run pipeline -- --collect                      recoge los batch terminados y sigue los lotes en curso
+//   npm run pipeline -- --approve <run_id>             tras revisar: aprueba las fotos actuales por encima de QA, sin reintentos
+//   npm run pipeline -- --retry <run_id>               tras revisar: hace los reintentos configurados de las fotos rechazadas
 //   … --publish   crea el producto INACTIVO en XDOPE_API_URL (sin esto el lote se queda listo en "qa")
-//   … --quality baja|media|alta   calidad de las fotos del lote nuevo (por defecto IMAGE_QUALITY o media)
+//   … --quality baja|media|alta   calidad de las fotos del lote nuevo (por defecto IMAGE_QUALITY o baja)
+//   … --auto-retries  el lote nuevo reintenta solo lo que QA rechaza, sin esperar la revisión de Diego
 //   … --realtime  genera las fotos al momento (precio completo). Por defecto todo va en batch de Gemini (mitad de
 //                 precio): el lote queda en "generating" y se recoge con --collect cuando cada batch termina.
 import { unlinkSync } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { z } from "zod";
@@ -22,7 +25,7 @@ import { attributeOfValues, colorAttribute, resolveColors, runPublisher, runTag 
 import { CuratorPick, Defaults, MIN_COLORS, MockupSet, ProductBrief, ProductListing, PublishResult, ShotList } from "../contracts/index.js";
 import { readCatalog, writeCatalog } from "../designs/library.js";
 import { GeminiImages } from "../images/gemini.js";
-import { approvedColors, generateMockups, toMockupSet, type ShotResult } from "../images/mockups.js";
+import { approvedColors, decide, generateMockups, readProgress, toMockupSet, type ShotResult } from "../images/mockups.js";
 import { Claude, type ImageInput } from "../llm/claude.js";
 import { renderReview } from "../review.js";
 import { QUALITY, parseQuality } from "../quality.js";
@@ -82,6 +85,8 @@ process.on("exit", () => {
 });
 
 const runIds = [...list(opt("resume"))];
+for (const id of list(opt("approve"))) runIds.push(await applyDecision(id, "approve"));
+for (const id of list(opt("retry"))) runIds.push(await applyDecision(id, "retry"));
 if (flag("collect")) {
   for (const r of await store.list()) if (["design_ready", "shots_planned", "generating"].includes(r.status) && !runIds.includes(r.run_id)) runIds.push(r.run_id);
 }
@@ -137,7 +142,7 @@ async function createRun(ref: string, reason: string): Promise<string> {
   await store.create(runId, designId);
   const jpg = await sharp(await readFile(photo)).rotate().resize(1536, 1536, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
   await writeFile(store.file(runId, "design.jpg"), jpg);
-  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH }, null, 2) + "\n");
+  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH, review_before_retry: !flag("auto-retries") }, null, 2) + "\n");
   console.log(`[${runId}] lote creado para ${designId}`);
   return runId;
 }
@@ -180,9 +185,15 @@ async function processRun(runId: string, log: (m: string) => void) {
     if (state.status === "shots_planned") state = await store.transition(runId, "generating");
     const outcome = await generateMockups({
       claude, gemini, runId, design, shotList, dir,
-      ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false, log,
+      ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false,
+      reviewBeforeRetry: source.review_before_retry ?? true, log,
     });
     if (outcome.kind === "waiting") return log(`Batch pendiente (${outcome.state}); se recoge con --collect o con el botón de la GUI`);
+    if (outcome.kind === "review") {
+      const a = outcome.awaiting;
+      await writeReview(runId, curator, shotList, { results: outcome.results, image_cost_usd: Number(outcome.imageCost.toFixed(3)) }, [], `Esperando tu revisión: QA rechazó ${a.rejected.join(", ")}. Aprueba las fotos (--approve) ${a.can_retry ? `o haz los reintentos (--retry, ~USD ${a.retry_cost_usd.toFixed(2)})` : "o descarta el lote; ya no quedan reintentos"}.`);
+      return log(`Esperando tu revisión (${a.rejected.length} foto(s) rechazada(s) por QA). Revisa review.html y usa "Fotos OK" o "Hacer reintentos" en el panel`);
+    }
     const { results, imageCost } = outcome;
     await store.writeArtifact(runId, "mockups.json", MockupSet, toMockupSet(runId, results, imageCost));
     qa = { results, image_cost_usd: Number(imageCost.toFixed(3)) };
@@ -305,6 +316,28 @@ async function buildBrief(runId: string, curator: CuratorPick, shotList: ShotLis
   };
 }
 
+// Aplica la decisión de Diego tras revisar las fotos y deja el lote listo para seguir en "generating".
+async function applyDecision(runId: string, decision: "approve" | "retry"): Promise<string> {
+  const dir = store.runDir(runId);
+  let state = await store.get(runId);
+  const progress = await readProgress(dir);
+  if (!progress) throw new Error(`El lote ${runId} no tiene fotos generadas con la versión actual`);
+  if (progress.awaiting_review) {
+    await decide(dir, decision);
+  } else if (decision === "approve" && (state.status === "qa" || (state.status === "failed" && state.error?.step === "qa"))) {
+    progress.decision = "approve";
+    await writeFile(path.join(dir, "mockups", "progress.json"), JSON.stringify(progress, null, 2));
+  } else {
+    throw new Error(`El lote ${runId} no está esperando revisión`);
+  }
+  if (state.status === "failed") state = await store.reopen(runId);
+  // Se rehacen el resumen de fotos y la ficha con la nueva aprobación.
+  for (const f of ["qa.json", "mockups.json", "listing.json"]) await rm(store.file(runId, f), { force: true });
+  if (state.status === "qa") await store.transition(runId, "generating");
+  console.log(`[${runId}] ${decision === "approve" ? "Fotos aprobadas por Diego" : "Reintentos pedidos por Diego"}`);
+  return runId;
+}
+
 async function markPublished(designId: string, productId: string) {
   const catalog = await readCatalog(CATALOG);
   const entry = catalog.find((d) => d.design_id === designId);
@@ -314,7 +347,7 @@ async function markPublished(designId: string, productId: string) {
   await writeCatalog(CATALOG, catalog);
 }
 
-async function writeReview(runId: string, curator: CuratorPick, shotList: ShotList, qa: { results: ShotResult[]; image_cost_usd: number }, colors: string[]) {
+async function writeReview(runId: string, curator: CuratorPick, shotList: ShotList, qa: { results: ShotResult[]; image_cost_usd: number }, colors: string[], customNote?: string) {
   const summary = {
     designId: ".",
     curator,
@@ -325,7 +358,7 @@ async function writeReview(runId: string, curator: CuratorPick, shotList: ShotLi
     batch: BATCH,
   };
   const note = `Colores aprobados: ${colors.join(", ") || "ninguno"}. Nada se publica sin --publish, y siempre queda inactivo.`;
-  await writeFile(store.file(runId, "review.html"), renderReview([summary], `Lote ${runId}`, note));
+  await writeFile(store.file(runId, "review.html"), renderReview([summary], `Lote ${runId}`, customNote ?? note));
 }
 
 function slug(s: string) {
