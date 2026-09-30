@@ -1,0 +1,12 @@
+[
+  { "category_id": "trial_anime", "name": "Anime" },
+  { "category_id": "trial_animales", "name": "Animales" },
+  { "category_id": "trial_videojuegos", "name": "Videojuegos" },
+  { "category_id": "trial_peliculas", "name": "Películas y series" },
+  { "category_id": "trial_musica", "name": "Música" },
+  { "category_id": "trial_deportes", "name": "Deportes" },
+  { "category_id": "trial_humor", "name": "Humor" },
+  { "category_id": "trial_arte", "name": "Arte y cultura" },
+  { "category_id": "trial_naturaleza", "name": "Naturaleza" },
+  { "category_id": "trial_general", "name": "General" }
+]

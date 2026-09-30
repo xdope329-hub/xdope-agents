@@ -58,7 +58,7 @@ export function loadScanConfig(env: Record<string, string | undefined>): ScanCon
   return parseOrThrow(ScanConfig, env);
 }
 
-function parseOrThrow<T>(schema: z.ZodType<T, z.ZodTypeDef, unknown>, env: Record<string, string | undefined>): T {
+function parseOrThrow<T>(schema: z.ZodType<T>, env: Record<string, string | undefined>): T {
   const parsed = schema.safeParse(env);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `- ${i.path.join(".")}: ${i.message}`);

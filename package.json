@@ -11,11 +11,15 @@
     "typecheck": "tsc -p . --noEmit",
     "test": "vitest run",
     "scan": "tsx --env-file=.env src/cli/scan.ts",
-    "schedule:preview": "tsx src/cli/schedule-preview.ts"
+    "schedule:preview": "tsx src/cli/schedule-preview.ts",
+    "trial": "tsx src/cli/trial.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.130.0",
+    "@google/genai": "^2.24.0",
     "croner": "^9.1.0",
-    "zod": "^3.23.8"
+    "sharp": "^0.35.5",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

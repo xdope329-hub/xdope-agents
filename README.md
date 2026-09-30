@@ -23,3 +23,11 @@ Para agregar un diseño nuevo basta con copiar su foto (JPG, PNG o WebP) en esa 
 1. Copia `schedule.example.json` a `schedule.json`.
 2. Ajusta `timezone`, los días (`lun` a `dom`) y las horas (`HH:MM`) de cada tarea.
 3. Corre `npm run schedule:preview` para ver las próximas ejecuciones.
+
+## Prueba de los agentes (sin publicar en la tienda)
+Corre Curador → Director de arte → generación con Gemini → QA y deja las fotos 1080×1350 con un `review.html`.
+
+- **En GitHub:** pestaña Actions → "Prueba de agentes" → Run workflow. Pega URLs de fotos de bordados separadas por coma, o deja vacío para usar las fotos de `samples/`. Necesita los secrets `ANTHROPIC_API_KEY` y `GEMINI_API_KEY`. El resultado se descarga como artefacto `resultados-prueba`.
+- **En tu PC:** `npm run trial -- "ruta/a/bordado.jpg"` con las claves en `.env` (`node --env-file=.env` o variables de entorno).
+
+Costo aproximado por diseño: USD 1–1.5 en imágenes (Nano Banana 2 a 2K, reintento con Nano Banana Pro) más unos centavos de Claude.

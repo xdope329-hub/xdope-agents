@@ -17,6 +17,9 @@ Deriva de `specs/`. Si algo aquí contradice una spec, manda la spec.
 
 Umbrales iniciales (se ajustan con la primera corrida real): contraste color de hoodie vs. hilo ΔE ≥ 25 promedio; resto según `specs/02` QA visual.
 
+## Prueba de punta a punta (adelanto)
+`npm run trial` y el workflow "Prueba de agentes" corren una versión mínima de Curador, Director de arte, generación y QA sin preparación de diseño avanzada ni publicación, para validar calidad y costo con diseños reales antes de completar las fases.
+
 ## Tareas
 Cada tarea termina con tests que prueban sus criterios de aceptación.
 

@@ -201,7 +201,7 @@ export const MockupSet = z.object({
       final: z.string().nullable(),
       qa: z.object({
         passed: z.boolean(),
-        scores: z.record(z.number()),
+        scores: z.record(z.string(), z.number()),
         reasons: z.array(z.string()),
       }),
     }),
@@ -216,7 +216,7 @@ export const ProductListing = z.object({
   description_html: z.string().min(1),
   tags: z.array(z.string()).min(1),
   seo: z.object({ title: z.string().min(1).max(70), description: z.string().min(1).max(155) }),
-  image_alts: z.record(z.string().min(1)),
+  image_alts: z.record(z.string(), z.string().min(1)),
   language: z.string().default("es"),
 });
 export type ProductListing = z.infer<typeof ProductListing>;
