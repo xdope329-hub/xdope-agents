@@ -109,6 +109,7 @@ export const Defaults = z.object({
   }),
   stock_per_variant: z.number().int().nonnegative(),
   embroidery_placement: Placement,
+  tax_id: z.string().min(1).nullable().default(null),
 });
 export type Defaults = z.infer<typeof Defaults>;
 

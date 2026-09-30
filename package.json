@@ -5,7 +5,7 @@
   "description": "Agentes para publicar hoodies bordados en xDope",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsc -p .",
@@ -17,7 +17,9 @@
     "schedule:install": "node src/scheduler/install.cjs",
     "schedule:remove": "node src/scheduler/install.cjs --remove",
     "schedule:preview": "tsx src/cli/schedule-preview.ts",
-    "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts"
+    "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts",
+    "pipeline": "tsx --env-file-if-exists=.env src/cli/pipeline.ts",
+    "schedule:install": "tsx src/cli/schedule-install.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",
