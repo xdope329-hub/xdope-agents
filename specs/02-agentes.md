@@ -4,17 +4,6 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 
 ---
 
-## 1. Intake
-**Rol:** convertir lo que Diego entrega (archivo de diseño + notas sueltas) en un `ProductBrief` completo.
-**Entradas:** archivo(s) del bordado, texto libre de Diego (nombre, colección, colores, precio, tallas).
-**Salida:** `ProductBrief`.
-**Herramientas:** LLM, lectura de archivos, `GET` de productos, atributos y categorías de xdopestore-api (para evitar slugs duplicados y mapear colores/tallas).
-**Criterios de aceptación**
-- Todos los campos requeridos de `ProductBrief` presentes; si falta precio o colores, pregunta en vez de inventar.
-- `slug` único frente al catálogo existente.
-- Cada color y talla corresponde a un `attribute_value` existente en la API (se guarda su id). Si un color no existe, el Intake lo reporta; no lo crea solo.
-- Categoría existente en la API.
-
 ## 0. Biblioteca de diseños (servicio, no agente creativo)
 **Rol:** mantener el catálogo de bordados disponibles y detectar los nuevos.
 **Fuente principal:** `C:\Users\Diego Benavides\Desktop\Embroidery supper pack\1. JUST PHOTOS of all designs` (fotos de todos los diseños). Se configura como `DESIGNS_DIR`, no queda escrita en el código.
@@ -31,6 +20,24 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 - Correr el escaneo dos veces seguidas no duplica entradas.
 - Imágenes duplicadas con distinto nombre se detectan como el mismo diseño.
 - Nunca modifica ni borra archivos de la carpeta de Diego (solo lectura).
+
+## 1. Curador (arranque automático)
+**Rol:** iniciar cada lote sin intervención de Diego. Elige el diseño, redacta el título y la descripción corta creativa, y arma el `ProductBrief` para el resto de los agentes.
+**Cuándo corre:** en un horario configurable (`SCHEDULE`, por defecto una vez al día) o con el comando `npm run start`. Cada ejecución inicia `PRODUCTS_PER_RUN` lotes (por defecto 1).
+**Entradas:** `designs.json`, catálogo actual de la tienda (productos, categorías, atributos), `defaults.json` y `brand-guide`.
+**Qué hace**
+1. **Elige una imagen** entre los diseños `new` que no tengan producto. Criterios, en orden: no es `low_res`; no se parece a un producto ya publicado (comparación de embeddings de imagen); alterna temas y estilos respecto a los últimos 5 lotes; a igualdad, el más antiguo primero. Guarda el motivo de la elección.
+2. **Mira la imagen** con un modelo de visión para entender qué muestra y su estilo.
+3. **Redacta el título**: corto, con gancho, ≤ 60 caracteres, que diga que es un hoodie bordado y nombre el diseño. Propone 3 opciones y elige una con su razón.
+4. **Redacta la descripción corta creativa**: 1–2 frases, ≤ 160 caracteres, con el tono de marca. Es la que va en `short_description`.
+5. **Completa el `ProductBrief`** con los valores de `defaults.json` (precio, tallas, categoría, material, stock por variante, ubicación del bordado sugerida) y un `slug` único.
+**Salida:** `CuratorPick` (diseño elegido, motivo, opciones de título, título elegido, descripción corta) + `ProductBrief`.
+**Criterios de aceptación**
+- Nunca elige un diseño que ya tiene producto, ni uno `low_res`.
+- Título ≤ 60 caracteres y descripción corta ≤ 160; ninguno inventa materiales, medidas ni licencias que no estén en `defaults.json` o la imagen.
+- `slug` único frente al catálogo existente.
+- Tallas y categoría existen en la API. Si `defaults.json` falta o tiene un id que no existe, el lote falla con un error claro; no inventa valores.
+- Si no hay diseños `new` elegibles, termina sin crear lote y lo deja registrado.
 
 ## 2. Preparación del diseño
 **Rol:** dejar el bordado listo para componer sobre una prenda.
@@ -92,8 +99,8 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 
 ## 6. Copywriter
 **Rol:** escribir la ficha de producto.
-**Entradas:** `ProductBrief`, `DesignAsset`, `brand-guide`, 2–3 fichas existentes de la tienda como ejemplo de tono.
-**Salida:** `ProductListing`.
+**Entradas:** `CuratorPick` (título y descripción corta ya definidos), `ProductBrief`, `DesignAsset`, `brand-guide`, 2–3 fichas existentes de la tienda como ejemplo de tono.
+**Salida:** `ProductListing` (descripción larga en HTML, tags, SEO, alt text). Respeta el título y la descripción corta del Curador; no los reescribe.
 **Criterios de aceptación**
 - Título ≤ 70 caracteres, meta description ≤ 155.
 - Menciona que el diseño es bordado (no estampado) y el material/gramaje del `ProductBrief`.

@@ -16,6 +16,31 @@ Esquemas mínimos. Se implementan como JSON Schema (o Pydantic/Zod) y cada agent
 }
 ```
 
+## CuratorPick
+```json
+{
+  "run_id": "2026-09-30-calcifer",
+  "design_id": "d_3f9a1c",
+  "selection_reason": "diseño nuevo, alta resolución, estilo anime distinto a los últimos 5 lotes",
+  "title_options": ["Hoodie Calcifer Bordado", "Calcifer: Fuego Bordado", "Hoodie Llama Viva"],
+  "title": "Hoodie Calcifer Bordado",
+  "title_reason": "…",
+  "short_description": "El demonio de fuego más querido, bordado hilo a hilo para que el calor lo lleves tú."
+}
+```
+
+## defaults.json (configuración, no la genera un agente)
+```json
+{
+  "price": {"amount": 0, "sale_price": null},
+  "size_attribute_value_ids": ["…"],
+  "category_ids": ["…"],
+  "garment": {"type": "hoodie", "material": "…", "weight_gsm": 0, "fit": "…"},
+  "stock_per_variant": 10,
+  "embroidery_placement": "chest_left"
+}
+```
+
 ## ProductBrief
 ```json
 {
@@ -31,7 +56,8 @@ Esquemas mínimos. Se implementan como JSON Schema (o Pydantic/Zod) y cada agent
   "sizes": [{"name": "M", "attribute_value_id": "…"}],
   "price": {"amount": 0, "sale_price": null},
   "stock_per_variant": 10,
-  "notes": "texto libre de Diego"
+  "title": "Hoodie Calcifer Bordado",
+  "short_description": "…"
 }
 ```
 

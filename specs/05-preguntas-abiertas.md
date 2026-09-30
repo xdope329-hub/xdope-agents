@@ -9,4 +9,5 @@ Pendientes (entre paréntesis el default que asumen las specs):
 3. **Diseños en Wilcom `.EMB`.** Ya no bloquea: la fuente son las fotos. Exportarlos a DST o PES solo mejora la validación de forma y colores.
 4. **Licencia de `MockUps-pack`.** (Solo se usan como base las fotos de `Own/`; el resto no se publica sin confirmar su licencia).
 5. **Tono e idioma de las fichas.** (Español, tono streetwear; el Copywriter toma 2–3 fichas actuales de la tienda como ejemplo).
-6. **Primer diseño para la prueba de punta a punta.** (CALCIFER, porque tiene archivos de máquina y previews).
+6. **Valores por defecto de `defaults.json`:** precio, tallas, categoría, material y stock por variante de los hoodies. (Se toman de los hoodies que ya están en la tienda y se le muestran a Diego para confirmar).
+7. **Frecuencia del arranque automático.** (Una vez al día, 1 producto por ejecución).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ShotList } from "../src/contracts/index.js";
+import { CuratorPick, ShotList } from "../src/contracts/index.js";
 
 const color = (name: string, hex: string) => ({ name, attribute_value_id: `av_${name}`, hex, contrast_ok: true });
 const shot = (color: string, framing: string, i: number) => ({
@@ -46,5 +46,29 @@ describe("ShotList", () => {
   it("rechaza colores sin contraste suficiente", () => {
     const colors = base.colors.map((c) => (c.name === "Negro" ? { ...c, contrast_ok: false } : c));
     expect(ShotList.safeParse({ ...base, colors }).success).toBe(false);
+  });
+});
+
+describe("CuratorPick", () => {
+  const pick = {
+    run_id: "r1",
+    design_id: "d_1",
+    selection_reason: "nuevo y en alta resolución",
+    title_options: ["Hoodie Calcifer Bordado", "Calcifer: Fuego Bordado", "Hoodie Llama Viva"],
+    title: "Hoodie Calcifer Bordado",
+    title_reason: "el más claro",
+    short_description: "El demonio de fuego más querido, bordado hilo a hilo.",
+  };
+
+  it("acepta una elección válida", () => {
+    expect(CuratorPick.safeParse(pick).success).toBe(true);
+  });
+
+  it("rechaza un título que no está entre las opciones", () => {
+    expect(CuratorPick.safeParse({ ...pick, title: "Otro" }).success).toBe(false);
+  });
+
+  it("rechaza una descripción corta de más de 160 caracteres", () => {
+    expect(CuratorPick.safeParse({ ...pick, short_description: "x".repeat(161) }).success).toBe(false);
   });
 });

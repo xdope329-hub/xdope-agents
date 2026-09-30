@@ -3,7 +3,7 @@
 Reglas que ninguna spec, agente ni tarea puede romper.
 
 1. **Fidelidad del diseño por encima de todo.** El bordado que aparece en una foto debe ser reconocible como el archivo original: misma forma, mismos colores de hilo, sin letras inventadas ni elementos agregados. Una foto bonita con el bordado alterado se descarta.
-2. **Nada se publica sin aprobación humana.** xdopestore-api no tiene estado borrador, así que los agentes crean el producto con `status: 0` (inactivo, invisible en la tienda). Solo Diego lo pasa a `status: 1` desde el admin-dashboard.
+2. **Todo es automático hasta la activación.** El proceso arranca solo y llega sin pausas hasta el producto creado. **Nada queda visible sin aprobación humana:** xdopestore-api no tiene estado borrador, así que los agentes crean el producto con `status: 0` (inactivo, invisible en la tienda). Solo Diego lo pasa a `status: 1` desde el admin-dashboard.
 3. **Contratos explícitos.** Los agentes solo se comunican con los JSON definidos en `03-contratos-de-datos.md`. Si falta un campo requerido, el agente falla con un error claro; no inventa.
 4. **Trazabilidad.** Cada imagen y cada texto guarda de dónde salió: diseño fuente, modelo/API usada, prompt, semilla y fecha. Todo lote tiene un `run_id`.
 5. **Idempotencia.** Correr el flujo dos veces con el mismo `run_id` no duplica productos. Cada producto creado por agentes lleva el tag `agent-run:<run_id>` y el Publicador lo busca antes de crear.

@@ -3,11 +3,8 @@
 ```
  [0] Biblioteca detecta diseños nuevos en la carpeta de fotos
               │
-              ▼
- Diego elige un diseño + datos mínimos (colores, precio)
-              │
-              ▼
- [1] Intake ──► ProductBrief
+              ▼  (horario o `npm run start`, sin intervención)
+ [1] Curador ──► elige imagen + título + descripción corta ──► CuratorPick + ProductBrief
               │
               ▼
  [2] Preparación del diseño ──► DesignAsset (bordado recortado, máscara, paleta de hilos)
@@ -27,18 +24,16 @@
      ──► ProductListing
               │
               ▼
- ◆ GATE HUMANO 1: Diego revisa fotos + ficha en una sola vista
-              │  aprobar / pedir cambios (vuelve al paso indicado)
-              ▼
  [7] Publicador ──► producto INACTIVO (status 0) en xdopestore-api + PublishResult
               │
               ▼
- ◆ GATE HUMANO 2: Diego activa el producto en el admin-dashboard (status 1)
+ ◆ ÚNICO PASO HUMANO: Diego revisa el producto (fotos, título, ficha) en el admin-dashboard
+   y lo activa (status 1). Si no le gusta, lo deja inactivo o lo borra.
 ```
 
 ## Estados de un lote (`run.status`)
-`intake` → `design_ready` → `shots_planned` → `generating` → `qa` → `awaiting_review` → `publishing` → `inactive_created` → `live`
-Cualquier estado puede pasar a `failed` (con `error.step` y `error.reason`) o `changes_requested` (con el paso al que se vuelve).
+`curated` → `design_ready` → `shots_planned` → `generating` → `qa` → `publishing` → `inactive_created` → `live`
+Cualquier estado puede pasar a `failed` (con `error.step` y `error.reason`). Un lote fallido no bloquea los siguientes.
 
 ## Orquestación
 - Un **orquestador** (no es un agente creativo, es código) mueve el lote entre estados, guarda cada artefacto en `runs/<run_id>/` y reintenta fallas transitorias de API (3 intentos, backoff exponencial).
@@ -54,5 +49,6 @@ runs/<run_id>/
   qa.json
   listing.json
   publish.json
-  review.html    vista única para el Gate 1
+  curator.json
+  review.html    resumen del lote (fotos, prompts, puntajes de QA, costo)
 ```

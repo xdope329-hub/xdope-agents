@@ -12,6 +12,7 @@ Deriva de `specs/`. Si algo aquí contradice una spec, manda la spec.
 | Procesamiento de imagen (recorte, máscara, paleta, SSIM, ΔE) | `sharp` + utilidades propias | Corre en Node, sin Python |
 | Orquestación | Máquina de estados propia; artefactos en `runs/<run_id>/` | Estados de `specs/01`; reanudable |
 | Escaneo de diseños | CLI local en el PC de Diego (`npm run scan`) | La carpeta de fotos vive en su PC |
+| Arranque | `npm run start` + horario (`SCHEDULE`) que lanza al Curador | Todo automático hasta el producto inactivo |
 | Tienda | Cliente HTTP de xdopestore-api (`/login`, `/attachment`, `/product`) | Flujo real del mapeo; QA primero |
 
 Umbrales iniciales (se ajustan con la primera corrida real): contraste color de hoodie vs. hilo ΔE ≥ 25 promedio; resto según `specs/02` QA visual.
@@ -28,6 +29,7 @@ Cada tarea termina con tests que prueban sus criterios de aceptación.
 4. Biblioteca: escaneo de `DESIGNS_DIR`, hash, `designs.json`, detección de nuevos/renombrados/duplicados/faltantes.
 5. Subida de diseños nuevos a Cloudinary `xdope-designs/`.
 6. Preparación del diseño: recorte, fondo transparente, máscara, paleta, `low_res`.
+6b. Curador: elección de diseño, título, descripción corta, `ProductBrief` desde `defaults.json`.
 
 **Fase 3: imágenes**
 7. Director de arte: análisis de imagen, elección de ≥ 3 colores con contraste, concepto, `ShotList` con prompts.
@@ -38,7 +40,8 @@ Cada tarea termina con tests que prueban sus criterios de aceptación.
 **Fase 4: tienda**
 11. Copywriter.
 12. Cliente de xdopestore-api + Publicador (QA), con idempotencia por tag `agent-run:<run_id>`.
-13. Vista de revisión `review.html` (Gate 1).
+13. Resumen del lote `review.html` (fotos, prompts, QA, costo).
+13b. Arranque automático por horario.
 
 **Fase 5: validación**
 14. Corrida de punta a punta con 3 diseños reales en QA.

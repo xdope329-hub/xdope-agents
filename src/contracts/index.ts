@@ -45,9 +45,42 @@ export const ProductBrief = z.object({
   sizes: z.array(z.object({ name: z.string().min(1), attribute_value_id: z.string().min(1) })).min(1),
   price: z.object({ amount: z.number().positive(), sale_price: z.number().positive().nullable().default(null) }),
   stock_per_variant: z.number().int().nonnegative(),
-  notes: z.string().optional(),
+  title: z.string().min(1).max(60),
+  short_description: z.string().min(1).max(160),
 });
 export type ProductBrief = z.infer<typeof ProductBrief>;
+
+export const CuratorPick = z
+  .object({
+    run_id: runId,
+    design_id: z.string().min(1),
+    selection_reason: z.string().min(1),
+    title_options: z.array(z.string().min(1).max(60)).length(3),
+    title: z.string().min(1).max(60),
+    title_reason: z.string().min(1),
+    short_description: z.string().min(1).max(160),
+  })
+  .refine((p) => p.title_options.includes(p.title), {
+    message: "El título elegido debe ser una de las 3 opciones",
+    path: ["title"],
+  });
+export type CuratorPick = z.infer<typeof CuratorPick>;
+
+// Configuración fija de la que el Curador completa el ProductBrief. No la genera un agente.
+export const Defaults = z.object({
+  price: z.object({ amount: z.number().positive(), sale_price: z.number().positive().nullable().default(null) }),
+  size_attribute_value_ids: z.array(z.string().min(1)).min(1),
+  category_ids: z.array(z.string().min(1)).min(1),
+  garment: z.object({
+    type: z.literal("hoodie"),
+    material: z.string().min(1),
+    weight_gsm: z.number().positive().optional(),
+    fit: z.string().optional(),
+  }),
+  stock_per_variant: z.number().int().nonnegative(),
+  embroidery_placement: Placement,
+});
+export type Defaults = z.infer<typeof Defaults>;
 
 export const DesignAsset = z.object({
   run_id: runId,
