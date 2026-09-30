@@ -74,7 +74,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Entradas:** `ShotList` (una toma, con su prompt), `DesignAsset`, y la imagen de referencia de identidad (modelo o prenda) del color para mantener consistencia.
 **Salida:** 2–3 candidatas por toma dentro de `MockupSet`, con metadatos (API, modelo, prompt, semilla, costo).
 **Criterios de aceptación**
-- Resolución ≥ 2048 px en el lado largo (upscale permitido).
+- Calidad 1080p: mínimo 1080 px en el lado corto (formato de tienda 1080×1350, 4:5). Se genera a 2K y se reduce; nunca se amplía una imagen de menor resolución.
 - Archivo final JPG o WebP de menos de 10 MB (límite de `POST /attachment`).
 - Respeta el tope de costo del lote.
 - Nunca devuelve una imagen sin su `meta.json`.

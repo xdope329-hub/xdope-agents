@@ -10,7 +10,7 @@ Generar una persona realista con un hoodie es fácil hoy. Lo difícil es que **e
 | **Google Gemini** | Nano Banana Pro (`gemini-3-pro-image`) | ≈ USD 0.134 (1K/2K), ≈ 0.24 (4K) | 6 de objeto + 5 de personaje + 3 de estilo | 4K | **Recomendada.** Google la posiciona para consistencia de marca y de personaje: el bordado va como referencia de objeto y el modelo como referencia de personaje |
 | Google Gemini | Nano Banana 2 (`gemini-3.1-flash-image`) | USD 0.101 (2K); 0.0505 en batch | 10 de objeto + 4 de personaje | 4K | Más barata; candidata si Pro no rinde lo suficiente más |
 | Black Forest Labs | FLUX.2 [flex] / [pro] / [max] | USD 0.03–0.07 por megapíxel | 8 por API | 4 MP | Muy fotorealista; [flex] "preserva detalles pequeños" y acepta color exacto en hex. **Respaldo** |
-| OpenAI | GPT Image 2 (alta calidad) | USD 0.165–0.211 | varias | 1536 px | Buena con texto, pero no llega a los 2048 px que pide la spec sin upscale y es la más cara en calidad alta |
+| OpenAI | GPT Image 2 (alta calidad) | USD 0.165–0.211 | varias | 1536 px | Buena con texto; su formato vertical es 1024×1536, así que el lado corto queda por debajo de 1080 px y habría que ampliar. Es la más cara en calidad alta. Su API se paga aparte de ChatGPT Plus/Pro |
 | ByteDance | Seedream 4.x | similar a las anteriores vía revendedores | multi-referencia | 4K | Sin API oficial directa simple; descartada por ahora |
 
 Notas: todas las imágenes de Gemini llevan la marca de agua invisible SynthID (no se ve en la foto). Los precios cambian seguido: se vuelven a verificar antes de pasar a producción.
