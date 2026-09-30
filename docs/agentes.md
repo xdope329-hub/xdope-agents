@@ -11,6 +11,10 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
 - Corre programado (o con `npm run pipeline`): ejecuta Inventario, luego el Curador creativo, y encadena los agentes
   2–7 por cada diseño elegido, sin intervención manual.
 - Reintenta pasos fallidos, respeta `imageGen.maxCostPerDesignUsd` y registra el resultado de cada diseño en el catálogo.
+- **Programación:** `schedule.runs` define días (`lun…dom`), horas y cuántos diseños por ejecución; además una tarea de
+  recolección cada `schedule.collectEveryHours` horas para los lotes. `npm run schedule:install` muestra las tareas;
+  `-- --apply` las registra en el Programador de tareas de Windows y `npm run schedule:remove` las borra. El PC debe
+  estar encendido (las fotos de diseños son locales); logs en `logs/scheduler.log`.
 - **Modo batch (ahorro ~50 %):** los pasos con LLM y la generación de imágenes se envían por lotes (Anthropic Message
   Batches y Gemini Batch API). Cada ejecución: (a) recoge los lotes terminados y avanza esos diseños al siguiente paso,
   (b) envía los lotes nuevos. Un diseño tarda horas en completarse (hasta 24 h por lote), no minutos.

@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "description": "Agentes para publicar hoodies bordados en xDope",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "scan": "node src/catalog/scan.js"
+    "scan": "node src/catalog/scan.js",
+    "schedule:install": "node src/scheduler/install.js",
+    "schedule:remove": "node src/scheduler/install.js --remove"
   }
 }

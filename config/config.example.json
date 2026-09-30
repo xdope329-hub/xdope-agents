@@ -167,5 +167,33 @@
     "minConfidence": 0.7,
     "fallback": "minimalista",
     "createMissingAsChildOf": "hoodies"
+  },
+  "schedule": {
+    "timezone": "America/Bogota",
+    "taskFolder": "xdope-agents",
+    "runs": [
+      {
+        "days": [
+          "lun",
+          "mie",
+          "vie"
+        ],
+        "times": [
+          "09:00"
+        ],
+        "designsPerRun": 3
+      },
+      {
+        "days": [
+          "sab"
+        ],
+        "times": [
+          "10:00",
+          "16:00"
+        ],
+        "designsPerRun": 2
+      }
+    ],
+    "collectEveryHours": 3
   }
 }
