@@ -65,7 +65,11 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
      en la ubicación y tamaño del análisis.
   3. Mantener consistencia: mismo modelo/set dentro de un color (misma descripción de persona, fondo y luz;
      semilla fija si el proveedor la soporta).
-  4. Incluir prompt negativo (texto inventado, logos extra, manos deformes, bordado impreso/plano).
+  4. Incluir prompt negativo (texto inventado, logos extra, manos deformes, bordado impreso/plano, piel de plástico,
+     look de render 3D o ilustración).
+  5. **Fotorrealismo:** describir la toma como fotografía real (cámara y lente, p. ej. "35 mm, f/2.8", luz natural o de
+     estudio, textura de piel natural con poros, cabello con mechones sueltos, pliegues reales de la tela), modelos
+     diversos y creíbles de 20–35 años con pose y expresión naturales. Formato vertical 4:5.
 - **Salida:** `prompts.json`.
 - **Aceptación:** ≥9 prompts (≥3 colores × ≥3 tomas), cada uno con imagen de referencia adjunta.
 
@@ -96,6 +100,9 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
   - Aspecto de bordado real (relieve/puntada), no estampado.
   - Color de prenda correcto.
   - Anatomía y prenda sin deformaciones; sin texto ni logos extra.
+  - **Realismo del modelo:** debe parecer una foto de una persona real. Rechazar si hay piel plastificada o demasiado
+    lisa, ojos o dientes raros, manos con dedos de más o fusionados, cabello "pintado", iluminación incoherente o fondo
+    que se funde con la persona. El QA revisa la imagen a resolución completa y hace zoom a cara, manos y bordado.
   - Consistencia entre tomas del mismo color.
 - **Tareas:** si rechaza, devuelve motivo concreto al Director de arte para ajustar el prompt y regenerar
   (máx. `qa.maxRetries`). Si se agota, marca el color como fallido y, si quedan <3 colores, marca el diseño para revisión manual.

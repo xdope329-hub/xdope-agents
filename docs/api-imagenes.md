@@ -15,10 +15,14 @@ Precios públicos consultados en septiembre de 2026 (verificar antes de contrata
 
 ## Recomendación
 
-1. **Principal: Gemini 3.1 Flash Image.** Acepta la foto del bordado como referencia de objeto y la primera toma
-   generada como referencia de persona, que es justo lo que pide "mismo modelo en 3 fotos". Costo estimado por diseño
-   (9 imágenes + ~30 % de regeneraciones por QA, a 1–2K): **~$0.6–1.0**.
-2. **Alternativa / respaldo: FLUX.2 Pro**, para diseños donde Gemini no reproduzca bien la textura del bordado.
+Prioridad definida por Diego: vertical 4:5 (1080×1350), calidad decente (no la máxima) y **modelos que parezcan
+personas reales**.
+
+1. **Principal: FLUX.2 Pro.** Es el más fuerte en fotorrealismo de personas y de los más baratos a 1080×1350
+   (~$0.05–0.07 por imagen con la foto del bordado como referencia; ~$0.60–0.80 por diseño). Hasta 8 referencias:
+   foto del bordado + primera toma generada para mantener el mismo modelo.
+2. **Respaldo: Gemini 3.1 Flash Image**, cuando FLUX no reproduzca bien el bordado (~$0.10 por imagen).
+3. Se descartan Gemini 3 Pro Image (más caro de lo necesario) y GPT Image 2 queda solo en la prueba comparativa.
 3. Implementar el Generador detrás de una interfaz `generate({ prompt, referenceImages, size, seed })` para cambiar de
    proveedor por config sin tocar los agentes.
 
