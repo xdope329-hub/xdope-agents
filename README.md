@@ -51,3 +51,18 @@ npm run scan                                       # genera data/catalog.json
 ```
 
 Los agentes 0 y 2–7 y el orquestador están especificados; su implementación es el siguiente paso.
+
+## Probar el flujo (tiempo real)
+
+```bash
+npm install
+cp .env.example .env        # ANTHROPIC_API_KEY y GEMINI_API_KEY (XDOPE_* solo para publicar)
+npm run scan
+npm run pipeline -- --design 10          # un diseño concreto, sin publicar
+npm run pipeline -- --designs 2          # el Curador elige 2 diseños pendientes
+npm run pipeline -- --design 10 --publish   # además lo crea INACTIVO en XDOPE_API_URL (usar QA primero)
+```
+
+Resultados en `output/<id>/` (`brief.json`, `analysis.json`, `prompts.json`, `mockups/`, `qa.json`, `copy.json`).
+Si una ejecución se corta, repetir el mismo comando reanuda desde el último paso guardado.
+El modo batch (50 % más barato) está especificado pero aún no implementado; hoy todo corre en tiempo real.

@@ -101,7 +101,7 @@ Solo las fotos con modelo usan la API de imágenes; el resto se hace localmente,
 |---|---|---|
 | `model_front` | Modelo usando el hoodie, frontal, estilo lifestyle/estudio | API de imágenes (batch) |
 | `embroidery_closeup` | Primer plano del bordado mostrando textura de hilo | Recorte de la foto original (es un bordado real) |
-| `garment_flat` | Prenda sola, fondo neutro | Compositor local sobre foto base del hoodie en ese color |
+| `garment_flat` | Prenda sola, fondo neutro | API de imágenes, con la foto base del color como referencia si existe (`garment.flatBases`); un compositor local queda pendiente porque requiere recortar el fondo del bordado |
 | `model_alt` (opcional) | Modelo de perfil/espalda o en otra pose | API de imágenes (batch) |
 
 ## 4. Generador de mockups (sin LLM)

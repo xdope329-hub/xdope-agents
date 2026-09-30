@@ -64,8 +64,8 @@
   },
   "shots": {
     "model_front": "ai",
-    "embroidery_closeup": "crop_original",
-    "garment_flat": "local_composite"
+    "garment_flat": "ai",
+    "embroidery_closeup": "crop_original"
   },
   "style": "Fotografía de producto de estudio, luz suave, fondo neutro, estética streetwear",
   "llm": {
@@ -101,7 +101,8 @@
     ],
     "taxName": "IVA",
     "sizeChartAttachmentId": null,
-    "status": 0
+    "status": 0,
+    "stockPerVariant": 10
   },
   "houseModels": [],
   "taxonomy": {
