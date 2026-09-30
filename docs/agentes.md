@@ -69,8 +69,8 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
   3. Elegir **≥3 colores de prenda** de `garment.colors` con buen contraste con los hilos, justificando cada uno.
   4. Detectar riesgos: marcas registradas / personajes con copyright, texto ilegible, foto de baja calidad.
 - **Salida:** `analysis.json`.
-- **Aceptación:** ≥3 colores válidos del catálogo; si el riesgo de propiedad intelectual es `likely`, el orquestador
-  salta el diseño (queda `rejected` con el motivo) y el Curador elige otro.
+- **Aceptación:** ≥3 colores válidos del catálogo. El riesgo de propiedad intelectual queda registrado; solo descarta
+  el diseño si `ipPolicy` es `"reject"` (por defecto `"flag"`: se registra y se continúa).
 
 ## 3. Director de arte (prompts)
 
