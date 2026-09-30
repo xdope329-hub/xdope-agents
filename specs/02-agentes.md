@@ -58,9 +58,10 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Qué hace**
 1. **Analiza la imagen** con un modelo de visión: qué representa el diseño, estilo (anime, gamer, minimalista…), paleta de hilos, tamaño relativo, si tiene texto y dónde va mejor (pecho izquierdo, centro, espalda).
 2. **Elige ≥ 3 colores de hoodie** que contrasten bien con la paleta del bordado (contraste de luminancia y ΔE suficientes para que el hilo se lea) y que existan como `attribute_value` en la API. Si Diego ya indicó colores en el brief, se respetan y solo se completa hasta 3.
-3. **Define el concepto visual**: un modelo (persona) o una presentación de prenda (flat lay, colgada, maniquí invisible), coherente con el estilo del diseño. El mismo modelo o la misma presentación se usa en las 3 fotos de cada color, y idealmente en todos los colores.
+3. **Define el concepto visual**: por defecto un **modelo humano realista** (edad, estilo, rasgos, peinado) coherente con el estilo del diseño; flat lay o prenda colgada solo como toma extra, nunca como las 3 fotos de un color. El mismo modelo se usa en todas las fotos del producto.
 4. **Arma la `ShotList`**: por cada color, ≥ 3 tomas. Mínimo obligatorio por color: frontal plano medio, 3/4 o lateral, y detalle cercano del bordado.
 5. **Escribe el prompt de cada toma** a partir de una plantilla fija más lo que describe la imagen: sujeto, prenda y color, ubicación y tamaño del bordado, descripción del bordado ("bordado de hilo en relieve de <descripción>, respetar exactamente la referencia"), pose, fondo, luz, cámara, y un prompt negativo (sin letras extra, sin estampado plano, sin logos agregados).
+   Para que parezca foto real, la plantilla siempre pide: fotografía de producto tomada con cámara real (lente 50–85 mm), luz natural o de estudio suave, textura de piel natural con poros e imperfecciones leves, pelo con mechones sueltos, pliegues reales de la tela de algodón afelpado, poses relajadas; y el negativo excluye: piel de plástico o aerógrafo, estética de render 3D o ilustración, simetría perfecta, manos deformes, ojos vidriosos, fondos borrosos artificiales.
 **Salida:** `ShotList` con `concept`, `colors[]` y `shots[]`, cada toma con su `prompt` y `negative_prompt`.
 **Criterios de aceptación**
 - ≥ 3 colores y ≥ 3 tomas por color (constitución, regla 12).
@@ -91,7 +92,9 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 | Colores de hilo | ΔE entre paleta detectada y paleta del `DesignAsset` | ΔE promedio ≤ 8 |
 | Color de hoodie | ΔE contra el color pedido | ≤ 10 |
 | Texto inventado | OCR en la zona del bordado; si el original no tiene texto, no debe aparecer texto | 0 caracteres extra |
-| Anatomía y artefactos | Revisión con modelo de visión (manos, cara, costuras, cordones) | sin fallas graves |
+| Anatomía y artefactos | Revisión con modelo de visión (manos, dedos, cara, ojos, dientes, costuras, cordones, bolsillo canguro) | sin fallas graves |
+| **Realismo del modelo** | El modelo de visión puntúa de 1 a 10 "¿pasaría por una foto real de catálogo?" con una rúbrica fija: piel, ojos, pelo, manos, caída de la tela, luz y sombras coherentes, fondo. Justifica cada punto bajo 8 | ≥ 8 |
+| Consistencia del modelo | Misma persona que la imagen de identidad (comparación de rostro con el modelo de visión) | misma persona |
 | Ubicación | Bordado en la zona pedida | coincide |
 
 **Criterios de aceptación**

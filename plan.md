@@ -8,7 +8,7 @@ Deriva de `specs/`. Si algo aquí contradice una spec, manda la spec.
 | Lenguaje | TypeScript sobre Node 20+ | Mismo stack que xdopestore-api y el dashboard |
 | Contratos | `zod` en `src/contracts/` | Validación en tiempo de ejecución + tipos |
 | Análisis de imagen, prompts, copy y QA de visión | Claude (API de Anthropic) con entrada de imagen | Un solo proveedor de LLM para los agentes de razonamiento |
-| Generación de imágenes | Adaptador `ImageProvider`; principal Nano Banana Pro (`gemini-3-pro-image`), respaldo FLUX.2 [flex] | Decisión de `specs/04`; se confirma con la prueba comparativa 8a |
+| Generación de imágenes | Adaptador `ImageProvider`; principal Nano Banana 2 (`gemini-3.1-flash-image`) a 2K, escalamiento a Nano Banana Pro en reintentos, respaldo FLUX.2 [flex] | Decisión de `specs/04`; se confirma con la prueba comparativa 8a |
 | Procesamiento de imagen (recorte, máscara, paleta, SSIM, ΔE) | `sharp` + utilidades propias | Corre en Node, sin Python |
 | Orquestación | Máquina de estados propia; artefactos en `runs/<run_id>/` | Estados de `specs/01`; reanudable |
 | Escaneo de diseños | CLI local en el PC de Diego (`npm run scan`) | La carpeta de fotos vive en su PC |

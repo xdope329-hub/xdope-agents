@@ -18,8 +18,10 @@ Notas: todas las imágenes de Gemini llevan la marca de agua invisible SynthID (
 Fuentes: [precios Gemini API](https://ai.google.dev/gemini-api/docs/pricing), [modelos de imagen Gemini](https://ai.google.dev/gemini-api/docs/image-generation), [precio Nano Banana Pro](https://www.pixmind.io/posts/nano-banana-pro-pricing-guide-2026), [FLUX.2](https://docs.bfl.ai/flux_2/flux2_overview), [OpenAI imágenes](https://costgoat.com/pricing/openai-images), [comparativa julio 2026](https://www.buildmvpfast.com/api-costs/ai-image).
 
 ## Decisión
-- **Principal: Nano Banana Pro.** Es la que mejor cubre las dos cosas difíciles de este proyecto al mismo tiempo: que el bordado salga igual (referencia de objeto) y que sea el mismo modelo en las 3 fotos de cada color y entre colores (referencia de personaje).
-- **Respaldo: FLUX.2 [flex]**, con el mismo adaptador `ImageProvider`.
+Diego pidió (2026-09-30): fotos verticales 1080×1350, calidad decente sin ser la máxima, y modelos que parezcan personas reales.
+- **Principal: Nano Banana 2 (`gemini-3.1-flash-image`) a 2K.** Calidad suficiente para 1080×1350 a ≈ USD 0.10 por imagen, con referencias de objeto (bordado) y de personaje (modelo).
+- **Escalamiento: Nano Banana Pro** solo para las tomas que Nano Banana 2 no logra pasar en QA (fidelidad o realismo) tras el primer reintento. Así se paga el modelo caro solo cuando hace falta.
+- **Respaldo de proveedor: FLUX.2 [flex]**, con el mismo adaptador `ImageProvider`, si Gemini falla o no convence en la prueba.
 - **La decisión se confirma con una prueba comparativa** (tarea 8a del plan): 2 diseños reales × 3 tomas × {Nano Banana Pro, Nano Banana 2, FLUX.2 [flex]}, medidos con los umbrales del QA visual. Gana la de mayor tasa de aprobación; a igualdad, la más barata.
 
 ## Flujo por llamada con multi-referencia
@@ -35,7 +37,7 @@ La edición con máscara queda para los reintentos cuando QA detecta que el bord
 - **Nada de IA en xdopestore-api**: todo el pipeline de imágenes es nuevo y vive en el servicio de agentes, no en la API de la tienda. La API solo recibe las imágenes finales por `POST /attachment` (Cloudinary, máx. 10 MB).
 
 ## Pipeline por producto
-Las fotos finales **se generan con la API de imágenes** (Nano Banana Pro), con el prompt del Director de arte. La composición determinística queda solo como **respaldo** para una toma que no pase QA de fidelidad después de los reintentos; esas imágenes se marcan `fallback`.
+Las fotos finales **se generan con la API de imágenes** (Nano Banana 2, con escalamiento a Pro), con el prompt del Director de arte. La composición determinística queda solo como **respaldo** para una toma que no pase QA de fidelidad después de los reintentos; esas imágenes se marcan `fallback`.
 
 ```
 Producto
@@ -72,7 +74,8 @@ edit(image, mask, prompt, object_refs[], seed) -> Image
 Cada proveedor es un adaptador. El proveedor activo se elige por configuración, no en el código de los agentes.
 
 ## Costo estimado por producto
-1 imagen de identidad + 9 tomas + ~30 % de reintentos ≈ 13 llamadas.
-- Nano Banana Pro a 2K: ≈ USD 1.75 por producto.
-- Nano Banana 2 a 2K: ≈ USD 1.30 (≈ 0.65 en batch).
-Ambas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueba comparativa.
+1 imagen de identidad + 9 tomas + ~30 % de reintentos ≈ 13 llamadas, a 2K, reducidas a 1080×1350.
+- Solo Nano Banana 2: ≈ USD 1.30 por producto.
+- Con escalamiento a Pro en ~1 de cada 9 tomas: ≈ USD 1.40.
+- Solo Nano Banana Pro: ≈ USD 1.75.
+Todas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueba comparativa.
