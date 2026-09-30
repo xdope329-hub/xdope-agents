@@ -9,6 +9,7 @@ const QaOutput = z.object({
   embroidery_fidelity: z.number().describe("1 a 10: el bordado de la foto es igual a la referencia (formas, colores de hilo, sin agregados)"),
   realism: z.number().describe("1 a 10: ¿pasaría por una foto real de catálogo?"),
   same_person: z.boolean().nullable().describe("Si hay imagen de identidad: ¿es la misma persona? Si no hay, null"),
+  garment_present: z.boolean().describe("Hay una persona llevando puesto un hoodie (con capucha) del color pedido; false si es un parche suelto, solo tela o no hay prenda"),
   placement_ok: z.boolean(),
   size_ok: z.boolean().describe("El bordado tiene el tamaño pedido respecto al cuerpo; false si se ve gigante o mucho más grande"),
   stitch_texture_visible: z.boolean().describe("Se ven puntadas, brillo del hilo y relieve; false si parece estampado o plano"),
@@ -53,6 +54,7 @@ export async function runQa(opts: {
   const passed =
     out.embroidery_fidelity >= QA_THRESHOLDS.fidelity &&
     out.realism >= QA_THRESHOLDS.realism &&
+    out.garment_present &&
     out.placement_ok &&
     out.size_ok &&
     out.stitch_texture_visible &&

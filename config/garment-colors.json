@@ -1,9 +1,9 @@
 [
-  {"name": "Negro", "hex": "#151515"},
-  {"name": "Blanco", "hex": "#F5F5F2"},
-  {"name": "Blanco Marfil", "hex": "#FFF9DB"},
-  {"name": "Gris Jaspe", "hex": "#DEDEDE"},
-  {"name": "Vino Vintage", "hex": "#6B2E3A"},
-  {"name": "Beige", "hex": "#F4DFC2"},
-  {"name": "Cafe", "hex": "#5A3E2B"}
+  {"name": "Negro", "hex": "#151515", "en": "true black"},
+  {"name": "Blanco", "hex": "#F5F5F2", "en": "pure white"},
+  {"name": "Blanco Marfil", "hex": "#FFF9DB", "en": "ivory off-white"},
+  {"name": "Gris Jaspe", "hex": "#DEDEDE", "en": "light heather grey marl"},
+  {"name": "Vino Vintage", "hex": "#6B2E3A", "en": "deep washed burgundy wine red"},
+  {"name": "Beige", "hex": "#F4DFC2", "en": "light sand beige"},
+  {"name": "Cafe", "hex": "#5A3E2B", "en": "dark chocolate brown"}
 ]

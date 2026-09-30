@@ -66,8 +66,11 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Qué hace**
 1. **Analiza la imagen** con un modelo de visión: qué representa el diseño, estilo (anime, gamer, minimalista…), paleta de hilos, tamaño relativo, si tiene texto y dónde va mejor (pecho izquierdo, centro, espalda).
 2. **Elige 1 color de hoodie** que contraste bien con la paleta del bordado (contraste de luminancia y ΔE suficientes para que el hilo se lea) y que exista como `attribute_value` en la API. Si Diego ya indicó un color en el brief, se respeta.
-2b. **Bordados con marco** (cuadrado, rectangular, circular u ovalado, tipo parche): siempre pequeños y centrados: `chest_center` de 6 a 9 cm (decisión de Diego, 2026-09-30).
-2c. **Define ubicación y tamaño del bordado** (constitución, regla 13): `chest_left` pequeño (≤ 12 cm de ancho, típico 8–10 cm) por defecto; `chest_center` solo si el diseño necesita más tamaño (detalle fino, texto o composición ancha), hasta 20 × 20 cm. Guarda `embroidery_size_cm` en el análisis y lo escribe en cada prompt.
+2b. **Tamaño estándar del bordado** (constitución, regla 13; decisión de Diego, 2026-09-30). El Director elige un tamaño estándar y el código calcula ancho y alto con la proporción del diseño (lado mayor):
+   - `pecho_izquierdo` 9 cm en `chest_left`: por defecto.
+   - `centro_pequeno` 10 cm en `chest_center`: obligatorio para bordados con marco (cuadrado, rectangular, circular u ovalado, tipo parche).
+   - `centro_estandar` 15 cm y `centro_grande` 20 cm en `chest_center`: solo si el diseño necesita más tamaño para leerse.
+   Cada prompt de imagen da el tamaño en cm y como % del ancho de la imagen según el encuadre, exige el hoodie puesto del color pedido (también en el primer plano) y aclara que el fondo y la escala de la foto de referencia no son el producto.
 3. **Define el concepto visual**: por defecto un **modelo humano realista** (edad, estilo, rasgos, peinado) coherente con el estilo del diseño; flat lay o prenda colgada solo como toma extra, nunca como las 3 fotos de un color. El mismo modelo se usa en todas las fotos del producto.
 4. **Arma la `ShotList`**: por cada color, ≥ 3 tomas. Mínimo obligatorio por color: frontal plano medio, 3/4 o lateral, y detalle cercano del bordado.
 5. **Escribe el prompt de cada toma** a partir de una plantilla fija más lo que describe la imagen: sujeto, prenda y color, ubicación y tamaño del bordado, descripción del bordado ("bordado de hilo en relieve de <descripción>, respetar exactamente la referencia"), pose, fondo, luz, cámara, y un prompt negativo (sin letras extra, sin estampado plano, sin logos agregados).
@@ -107,6 +110,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 | **Realismo del modelo** | El modelo de visión puntúa de 1 a 10 "¿pasaría por una foto real de catálogo?" con una rúbrica fija: piel, ojos, pelo, manos, caída de la tela, luz y sombras coherentes, fondo. Justifica cada punto bajo 7 | ≥ 7 |
 | Consistencia del modelo | Misma persona que la imagen de identidad (comparación de rostro con el modelo de visión) | misma persona |
 | Ubicación | Bordado en la zona pedida | coincide |
+| Prenda | Una persona lleva puesto un hoodie del color pedido; nunca un parche suelto ni solo tela | presente |
 | Tamaño | Bordado del tamaño pedido, no gigante (regla 13). El prompt lo da en cm y como % del ancho del pecho | coincide (estricto) |
 | Fidelidad (visión) | Puntaje 1–10 del modelo de visión; pequeñas diferencias de tono o detalle fino se toleran (decisión de Diego, 2026-09-30), pero no una cara del diseño deformada o con otra expresión | ≥ 7 |
 | Textura de bordado | Se ven puntadas, brillo del hilo y relieve; no parece estampado | visible |

@@ -186,6 +186,7 @@ async function processRun(runId: string, log: (m: string) => void) {
     const outcome = await generateMockups({
       claude, gemini, runId, design, shotList, dir,
       ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false,
+      colorDescriptions: Object.fromEntries(palette.filter((c) => c.en).map((c) => [c.name, c.en!])),
       reviewBeforeRetry: source.review_before_retry ?? true, log,
     });
     if (outcome.kind === "waiting") return log(`Batch pendiente (${outcome.state}); se recoge con --collect o con el botón de la GUI`);

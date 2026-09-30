@@ -31,6 +31,7 @@ export interface MockupOptions {
   // true: si QA rechaza fotos, se detiene y espera la decisión de Diego (aprobar o reintentar) antes de gastar en reintentos.
   reviewBeforeRetry: boolean;
   log: (msg: string) => void;
+  colorDescriptions?: Record<string, string>; // nombre del color → descripción en inglés
 }
 
 export interface Attempt {
@@ -97,9 +98,13 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     const id = shot === first ? null : await identity();
     return {
       model,
-      prompt: `${shot.prompt}${sizeLine(o.shotList)}${FACE_LINE}${modelFaceLine(o.shotList, !!id)}\n\nAvoid: ${shot.negative_prompt}${fix}`,
+      prompt: `${shot.prompt}${hoodieLine(shot, o.shotList, o.colorDescriptions)}${sizeLine(o.shotList, shot)}${FACE_LINE}${modelFaceLine(o.shotList, !!id)}\n\nAvoid: ${shot.negative_prompt}${fix}`,
       refs: [
-        { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: o.design.data, mimeType: "image/jpeg" },
+        {
+          role: "Reference 1: ONLY the embroidery design to reproduce as raised thread embroidery, identical shapes and thread colors. Ignore this photo's background (fabric, felt, hoop, paper), framing and scale: it is not the garment and not the size.",
+          data: o.design.data,
+          mimeType: "image/jpeg",
+        },
         ...(id ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: id.data, mimeType: id.mediaType }] : []),
       ],
       aspectRatio: "4:5",
@@ -246,12 +251,24 @@ export function modelFaceLine(shotList: ShotList, hasIdentityRef: boolean): stri
 
 // Tamaño del bordado en términos que el modelo de imágenes respeta mejor que solo centímetros:
 // proporción del ancho del pecho (un hoodie de adulto mide unos 55 cm de ancho a la altura del pecho).
-export function sizeLine(shotList: ShotList): string {
+// Tamaño del bordado en % del ancho de la imagen según el encuadre, que el modelo respeta mejor que los centímetros.
+// En un plano de cintura a cabeza la imagen abarca ~100 cm de ancho; en el primer plano del pecho, ~35 cm.
+export function sizeLine(shotList: ShotList, shot: Shot): string {
   const size = shotList.analysis.embroidery_size_cm;
   if (!size) return "";
-  const pct = Math.round((size.w / 55) * 100);
+  const frameCm = shot.framing === "detail" ? 35 : 100;
+  const pct = Math.max(1, Math.round((size.w / frameCm) * 100));
   const where = shotList.analysis.best_placement === "chest_left" ? "on the left chest (wearer's left), above the heart" : "centered on the upper chest, below the neckline";
-  return `\n\nEMBROIDERY SIZE IS CRITICAL: the embroidery measures only ${size.w} cm wide × ${size.h} cm tall, ${where}. That is about ${pct}% of the chest width${size.w <= 12 ? ", roughly the size of a palm" : ""}. Keep plenty of plain hoodie fabric visible around it. Do NOT enlarge it, do not let it cover the chest, and keep this exact size in every shot.`;
+  const feel = size.w <= 10 ? "small, about the size of a palm" : size.w <= 15 ? "medium, about the width of a hand with fingers spread" : "about the width of a sheet of letter paper";
+  return `\n\nEMBROIDERY SIZE IS CRITICAL: a standard ${size.w} × ${size.h} cm embroidery (${feel}), ${where}. In this image it spans about ${pct}% of the image width. Plenty of plain hoodie fabric must be visible around it on every side. Do NOT enlarge it and never let it cover the chest from shoulder to shoulder.`;
+}
+
+// El hoodie siempre presente y del color pedido.
+export function hoodieLine(shot: Shot, shotList: ShotList, descriptions: Record<string, string> = {}): string {
+  const color = shotList.colors.find((c) => c.name === shot.color);
+  const desc = descriptions[shot.color] ? `${descriptions[shot.color]}, ` : "";
+  const detail = shot.framing === "detail" ? " This is a close-up of the chest of the person wearing it: the fleece fabric, the neckline and the edge of the hood are visible around the embroidery." : "";
+  return `\n\nGARMENT: the person is wearing a ${shot.color} pullover hoodie (${desc}${color?.hex ?? ""}) with hood and kangaroo pocket, heavy cotton fleece. The hoodie color must be exactly this color.${detail} Never show a loose patch, a fabric swatch or an embroidery hoop.`;
 }
 
 function bestAttempt(attempts: Attempt[]): Attempt | null {
