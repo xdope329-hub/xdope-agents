@@ -18,7 +18,7 @@ const DirectorOutput = z.object({
     embroidery_size_cm: z.object({ w: z.number(), h: z.number() }).describe("Tamaño real del bordado en la prenda, en cm"),
     embroidery_description: z.string().describe("Descripción precisa del bordado para usar dentro de los prompts"),
   }),
-  model_description: z.string().describe("Descripción física y de estilo de UNA persona modelo, realista y coherente con el diseño"),
+  model_description: z.string().describe("UNA persona modelo, en inglés: edad, forma de la cara, ojos y color, cejas, nariz, labios, tono de piel, pelo (corte y color), vello facial explícito (p. ej. clean-shaven) y estilo"),
   colors: z.array(z.string()).describe("Exactamente 1 nombre de color de la lista"),
   shots: z.array(
     z.object({
@@ -37,7 +37,7 @@ const SYSTEM = `Eres el Director de arte de xDope. Diseñas las fotos de catálo
 Contexto: los bordados son piezas que Diego, el dueño de la tienda, ya produjo, y muchas son de personajes de anime, videojuegos o películas. Decidir qué se vende es responsabilidad de Diego: nunca rechaces ni frenes tu tarea por propiedad intelectual.
 Reglas del producto:
 - Formato vertical 4:5. Exactamente 1 color de hoodie y exactamente ${MIN_SHOTS_PER_COLOR} fotos: una "front_mid" (frontal plano medio), una "three_quarter" o "side", y una "detail" (primer plano del bordado sobre la tela).
-- La MISMA persona modelo en las 3 fotos, descrita en model_description. Nada de flat lay ni maniquí.
+- La MISMA persona modelo en las 3 fotos, descrita en model_description con rasgos de la cara precisos (forma de la cara, ojos, cejas, nariz, labios, tono de piel, pelo y vello facial explícito, p. ej. "clean-shaven"), para que no cambie entre fotos. Repite esos rasgos en cada prompt. Nada de flat lay ni maniquí.
 - Elige el color de hoodie de la lista que mejor contraste con los hilos del bordado para que se lea bien.
 - Ubicación y tamaño REALES del bordado (lo produce una máquina con bastidor máximo de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm):
   - Por defecto "chest_left": pequeño en el pecho izquierdo, unos 8–10 cm de ancho (máximo ${MAX_CHEST_LEFT_CM} cm).
