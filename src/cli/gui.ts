@@ -89,6 +89,7 @@ async function runsSummary() {
       has_progress: !!progress,
       approved: qa ? `${qa.results.filter((x: { passed: boolean }) => x.passed).length}/${qa.results.length}` : null,
       image_cost_usd: qa?.image_cost_usd ?? progress?.image_cost_usd ?? null,
+      claude: await readJson(path.join(dir, "claude-usage.json")),
       has_listing: await exists(path.join(dir, "listing.json")),
       has_review: await exists(path.join(dir, "review.html")),
       admin_url: publish?.admin_url ?? null,
@@ -293,7 +294,7 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
     <div class="bar" style="margin:0"><button id="dprev">Anterior</button><span class="muted" id="dpage"></span><button id="dnext">Siguiente</button></div>
   </div>
 </div>
-<div class="card"><table><thead><tr><th></th><th>Lote</th><th>Estado</th><th>Batch</th><th>Fotos OK</th><th>Costo img.</th><th>Acciones</th></tr></thead><tbody id="runs"></tbody></table></div>
+<div class="card"><table><thead><tr><th></th><th>Lote</th><th>Estado</th><th>Batch</th><th>Fotos OK</th><th>Costo img.</th><th>Costo Claude</th><th>Acciones</th></tr></thead><tbody id="runs"></tbody></table></div>
 <div class="card"><div class="muted" id="jobtitle">Sin acciones en curso</div><pre id="log"></pre></div>
 </main>
 <script>
@@ -333,8 +334,14 @@ async function load() {
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
       "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
-      '<td><span class="badge s-' + (a ? "qa" : esc(r.status)) + '">' + (a ? "revisión pendiente" : esc(r.status)) + "</span>" + (a ? '<div class="muted">QA rechazó: ' + esc(a.rejected.join(", ")) + "</div>" : "") + "</td><td>" + b + "</td><td>" + esc(r.approved ?? "—") + "</td><td>" + (r.image_cost_usd != null ? "USD " + Number(r.image_cost_usd).toFixed(2) : "—") + '</td><td><div class="actions">' + acts.join("") + "</div></td></tr>";
-  }).join("") : '<tr><td colspan=7 class="muted">Aún no hay lotes. Crea uno con el botón de arriba.</td></tr>';
+      '<td><span class="badge s-' + (a ? "qa" : esc(r.status)) + '">' + (a ? "revisión pendiente" : esc(r.status)) + "</span>" + (a ? '<div class="muted">QA rechazó: ' + esc(a.rejected.join(", ")) + "</div>" : "") + "</td><td>" + b + "</td><td>" + esc(r.approved ?? "—") + "</td><td>" + (r.image_cost_usd != null ? "USD " + Number(r.image_cost_usd).toFixed(2) : "—") + "</td><td>" + claudeCell(r.claude) + '</td><td><div class="actions">' + acts.join("") + "</div></td></tr>";
+  }).join("") : '<tr><td colspan=8 class="muted">Aún no hay lotes. Crea uno con el botón de arriba.</td></tr>';
+}
+
+function claudeCell(u) {
+  if (!u) return '<span class="muted">—</span>';
+  const parts = Object.entries(u.agents).sort((a, b) => b[1].cost_usd - a[1].cost_usd).map(([k, v]) => esc(k) + " " + Number(v.cost_usd).toFixed(3));
+  return "USD " + Number(u.total_usd).toFixed(3) + '<div class="muted">' + parts.join(" · ") + "</div>";
 }
 
 function showJob(job) {

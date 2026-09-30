@@ -163,7 +163,7 @@ async function processRun(runId: string, log: (m: string) => void) {
   if (!curator) {
     log("Curador: título, descripción y categorías…");
     const { categories, fallback } = await curatorCategories();
-    const out = await runCurator({ claude, runId, designId: source.design_id, design, categories, selectionReason: source.selection_reason, fallbackCategory: fallback });
+    const out = await track(runId, "curador", () => runCurator({ claude, runId, designId: source.design_id, design, categories, selectionReason: source.selection_reason, fallbackCategory: fallback }));
     curator = await store.writeArtifact(runId, "curator.json", CuratorPick, out);
     log(`  ${curator.title} | ${curator.categories.map((c) => `${c.name} (${c.role})`).join(", ")}`);
   }
@@ -173,7 +173,7 @@ async function processRun(runId: string, log: (m: string) => void) {
   let shotList = await store.readArtifact(runId, "shots.json", ShotList);
   if (!shotList) {
     log("Director de arte: colores, concepto y prompts…");
-    shotList = await store.writeArtifact(runId, "shots.json", ShotList, (await runDirector({ claude, runId, design, title: curator.title, palette })).shotList);
+    shotList = await store.writeArtifact(runId, "shots.json", ShotList, (await track(runId, "director", () => runDirector({ claude, runId, design, title: curator.title, palette }))).shotList);
     log(`  Colores: ${shotList.colors.map((c) => c.name).join(", ")} | ${shotList.shots.length} tomas`);
   }
   if (state.status === "design_ready") state = await store.transition(runId, "shots_planned");
@@ -183,12 +183,12 @@ async function processRun(runId: string, log: (m: string) => void) {
   let qa = (await store.readArtifact(runId, "qa.json", QaFile)) as { results: ShotResult[]; image_cost_usd: number } | null;
   if (!qa) {
     if (state.status === "shots_planned") state = await store.transition(runId, "generating");
-    const outcome = await generateMockups({
+    const outcome = await track(runId, "qa", () => generateMockups({
       claude, gemini, runId, design, shotList, dir,
       ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false,
       colorDescriptions: Object.fromEntries(palette.filter((c) => c.en).map((c) => [c.name, c.en!])),
       reviewBeforeRetry: source.review_before_retry ?? true, log,
-    });
+    }));
     if (outcome.kind === "waiting") return log(`Batch pendiente (${outcome.state}); se recoge con --collect o con el botón de la GUI`);
     if (outcome.kind === "review") {
       const a = outcome.awaiting;
@@ -213,7 +213,7 @@ async function processRun(runId: string, log: (m: string) => void) {
   let listing = await store.readArtifact(runId, "listing.json", ProductListing);
   if (!listing) {
     log("Copywriter: ficha y SEO…");
-    const out = await runCopywriter({
+    const out = await track(runId, "copywriter", () => runCopywriter({
       claude,
       title: curator.title,
       shortDescription: curator.short_description,
@@ -224,7 +224,7 @@ async function processRun(runId: string, log: (m: string) => void) {
       sizes: [],
       categories: curator.categories.map((c) => c.name),
       shots: approved.map((r) => ({ shot_id: r.shot.shot_id, color: r.shot.color, framing: r.shot.framing })),
-    });
+    }));
     listing = await store.writeArtifact(runId, "listing.json", ProductListing, out);
   }
 
@@ -337,6 +337,24 @@ async function applyDecision(runId: string, decision: "approve" | "retry"): Prom
   if (state.status === "qa") await store.transition(runId, "generating");
   console.log(`[${runId}] ${decision === "approve" ? "Fotos aprobadas por Diego" : "Reintentos pedidos por Diego"}`);
   return runId;
+}
+
+// Costo de Claude por agente, acumulado en runs/<run_id>/claude-usage.json (también entre corridas).
+async function track<T>(runId: string, agent: string, fn: () => Promise<T>): Promise<T> {
+  const before = { ...claude.usage };
+  try {
+    return await fn();
+  } finally {
+    const file = store.file(runId, "claude-usage.json");
+    const usage = (await exists(file)) ? JSON.parse(await readFile(file, "utf8")) : { model: claude.model, agents: {}, total_usd: 0 };
+    const a = (usage.agents[agent] ??= { input_tokens: 0, output_tokens: 0, cost_usd: 0 });
+    a.input_tokens += claude.usage.input_tokens - before.input_tokens;
+    a.output_tokens += claude.usage.output_tokens - before.output_tokens;
+    a.cost_usd = Number((a.cost_usd + claude.usage.cost_usd - before.cost_usd).toFixed(4));
+    usage.model = claude.model;
+    usage.total_usd = Number(Object.values(usage.agents as Record<string, { cost_usd: number }>).reduce((t, x) => t + x.cost_usd, 0).toFixed(4));
+    await writeFile(file, JSON.stringify(usage, null, 2) + "\n");
+  }
 }
 
 async function markPublished(designId: string, productId: string) {
