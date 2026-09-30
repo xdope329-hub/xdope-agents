@@ -82,7 +82,7 @@ Todas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueb
 
 ## Reducción de costo (aprobada por Diego el 2026-09-30)
 1. **Batch API de Gemini (50 % menos), para todo.** Todas las imágenes van en batch, también la primera foto y los reintentos: primero la foto que fija a la persona modelo, luego las otras dos con esa identidad y, si QA rechaza alguna, un batch de reintentos (1 por foto). Nano Banana 2 a 2K baja a ≈ USD 0.05 por imagen. Los resultados llegan en minutos u horas; el lote espera en estado `generating` y se recoge con `--collect` o con el panel.
-   Calidad por lote: **baja** 1K con reintento Flash; **media** 2K con reintento Flash (por defecto); **alta** 2K con reintento Nano Banana Pro.
+   Calidad por lote: **baja** 1K con reintento Flash (por defecto); **media** 2K con reintento Flash; **alta** 2K con reintento Nano Banana Pro.
    Los agentes de Claude usan Claude Sonnet 5.5 por costo (`CLAUDE_MODEL` lo cambia).
 2. **Modelos de la casa.** En vez de inventar un modelo por producto, se mantiene un elenco fijo de 3–4 personas (`models/` con su imagen de identidad aprobada por Diego). El Director de arte elige uno según el estilo del diseño. Ahorra la imagen de identidad por producto y da una cara de marca consistente.
 3. **Menos reintentos.** Antes de generar, el Director de arte valida el prompt contra una lista de errores conocidos, y QA corre primero los chequeos baratos (OCR, color, SSIM) y solo después el modelo de visión. Meta: bajar reintentos de ~30 % a ~15 %.

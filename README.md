@@ -37,7 +37,7 @@ npm run gui                       # abre el panel
 
 - **Revisar batches:** consulta a Gemini el estado de cada batch pendiente y lo muestra (en cola, procesando, terminado…). Si alguno terminó, recoge los resultados en segundo plano: QA, reintentos, Copywriter.
 - **Recoger y continuar lotes:** lo mismo que `npm run pipeline -- --collect`.
-- **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo, con la calidad elegida (baja 1K, media 2K, alta 2K + reintento con Pro). Con "batch" (por defecto) todas las fotos van a Gemini Batch a mitad de precio en tres pasos (primera foto → las otras dos → reintentos); la acción termina enseguida y cada paso se recoge con "Revisar batches".
+- **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo, con la calidad elegida (baja 1K por defecto, media 2K, alta 2K + reintento con Pro). Con "batch" (por defecto) todas las fotos van a Gemini Batch a mitad de precio en tres pasos (primera foto → las otras dos → reintentos); la acción termina enseguida y cada paso se recoge con "Revisar batches".
 - Por lote: **Ver review**, **Continuar / Reintentar**, **Publicar (inactivo)** y **Abrir en admin**.
 
 Nada bloquea: cada acción corre `pipeline` como proceso aparte y el panel muestra su log. Solo corre una acción a la vez (también frente a las tareas programadas).

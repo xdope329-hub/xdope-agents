@@ -207,7 +207,7 @@ pre{white-space:pre-wrap;margin:0;max-height:320px;overflow:auto;font-size:12px}
   <button id="collect">Recoger y continuar lotes</button>
   <span class="muted">|</span>
   <label>Nuevo lote: <input type="number" id="count" min="1" max="20" value="1"></label>
-  <label>Calidad: <select id="quality"><option value="baja">baja</option><option value="media" selected>media</option><option value="alta">alta</option></select></label>
+  <label>Calidad: <select id="quality"><option value="baja" selected>baja</option><option value="media">media</option><option value="alta">alta</option></select></label>
   <label><input type="checkbox" id="batch" checked> batch (mitad de precio)</label>
   <button id="new">Crear</button>
   <span class="muted">|</span>
