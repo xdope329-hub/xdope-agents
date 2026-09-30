@@ -4,6 +4,7 @@
     "designDirs": ["C:/Users/Diego Benavides/Desktop/Embroidery supper pack/2. Embroidery Designs"],
     "output": "data/catalog.json"
   },
+  "batch": { "designsPerRun": 3, "preferWithMachineFiles": true },
   "garment": {
     "type": "hoodie",
     "minColors": 3,

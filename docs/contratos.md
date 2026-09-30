@@ -19,6 +19,19 @@
 }
 ```
 
+## output/<id>/brief.json
+
+```json
+{
+  "id": 10,
+  "start_image": "C:/.../1-500/10.jpg",
+  "title": "Hoodie Sensei Bordado",
+  "short_description": "Disciplina, calma y actitud: un bordado que se lleva con orgullo.",
+  "selection_reason": "Foto nítida, diseño limpio, archivos DST/PES disponibles, sin marcas visibles",
+  "created_at": "2026-09-30T18:40:00Z"
+}
+```
+
 ## output/<id>/analysis.json
 
 ```json

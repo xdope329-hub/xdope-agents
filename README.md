@@ -9,20 +9,26 @@ un agente escribe a partir de cada foto.
 
 ## Flujo
 
+Un orquestador corre el pipeline de forma automática (por ejemplo, `batch.designsPerRun` diseños por ejecución
+programada) hasta dejar el producto creado como inactivo:
+
 ```
-[1 Inventario] → [2 Analista visual] → [3 Director de arte (prompts)] → [4 Generador de mockups]
-      → [5 QA visual] ⟲ (regenera hasta N veces) → [6 Copywriter/SEO] → ✋ revisión de Diego
-      → [7 Publicador] → producto en la tienda con status 0 (inactivo) → ✋ Diego lo activa en el dashboard
+[1 Inventario] → [0 Curador creativo: elige la imagen, título y descripción corta]
+      → [2 Analista visual] → [3 Director de arte (prompts)] → [4 Generador de mockups]
+      → [5 QA visual] ⟲ (regenera hasta N veces) → [6 Copywriter/SEO] → [7 Publicador]
+      → producto en la tienda con status 0 (inactivo) → ✋ Diego lo activa en el dashboard
 ```
+
+Los diseños que fallan QA o tienen riesgo de propiedad intelectual se saltan y quedan registrados en el catálogo.
 
 Detalle de cada agente, tareas, entradas/salidas y criterios de aceptación: [`docs/agentes.md`](docs/agentes.md).
 Contrato de datos entre agentes: [`docs/contratos.md`](docs/contratos.md).
 
 ## Resultado esperado por diseño
 
-- Carpeta `output/<id>/` con `analysis.json`, `prompts.json`, `mockups/`, `qa.json`, `copy.json`, `publish.json`.
+- Carpeta `output/<id>/` con `brief.json`, `analysis.json`, `prompts.json`, `mockups/`, `qa.json`, `copy.json`, `publish.json`.
 - Mínimo **3 colores de prenda × 3 tomas** (modelo frontal, detalle del bordado, prenda sola) = 9 imágenes aprobadas por QA.
-- Producto `classified` en xDope: variantes Color × Talla, imágenes por color, SEO completo, `status: 0` hasta que Diego lo active.
+- Producto `classified` en xDope: variantes Color × Talla, imágenes por color, SEO completo, con el título y la descripción corta del Curador creativo.
 
 ## Fuentes de diseños
 
@@ -44,4 +50,4 @@ cp .env.example .env                               # llenar claves
 npm run scan                                       # genera data/catalog.json
 ```
 
-Los agentes 2–7 están especificados; su implementación es el siguiente paso.
+Los agentes 0 y 2–7 y el orquestador están especificados; su implementación es el siguiente paso.

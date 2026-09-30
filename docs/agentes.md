@@ -6,7 +6,29 @@ detiene en ese diseño y se puede reanudar desde ese paso.
 LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imágenes: proveedor configurable
 (`imageGen.provider`); requisito: **debe aceptar imagen de referencia** (edición/composición), no solo texto.
 
+## Orquestador (sin LLM)
+
+- Corre programado (o con `npm run pipeline`): ejecuta Inventario, luego el Curador creativo, y encadena los agentes
+  2–7 por cada diseño elegido, sin intervención manual.
+- Reintenta pasos fallidos, respeta `imageGen.maxCostPerDesignUsd` y registra el resultado de cada diseño en el catálogo.
+
 ---
+
+## 0. Curador creativo (inicia el proceso)
+
+- **Rol:** decidir qué diseño se trabaja y darle identidad de producto antes de que actúen los demás agentes.
+- **Entrada:** `data/catalog.json` (diseños `pending`), foto(s) de cada candidato, `batch` de la config,
+  títulos ya usados en la tienda (`GET /product`) para no repetir.
+- **Tareas:**
+  1. Elegir `batch.designsPerRun` diseños priorizando: foto nítida, diseño atractivo para hoodie, con archivos de
+     máquina disponibles, sin personajes/marcas registradas evidentes y variedad frente a lo ya publicado.
+  2. Elegir la **imagen de partida** (principal o una de `extra_photos`), la más clara para usar como referencia.
+  3. Redactar el **título del producto** (corto, memorable, en español; sin nombres con copyright).
+  4. Redactar una **descripción corta creativa** (1–2 frases, voz de marca xDope).
+  5. Marcar el diseño como `in_progress` y pasar el brief al Analista visual.
+- **Salida:** `brief.json`.
+- **Aceptación:** título único en la tienda, descripción corta ≤ 200 caracteres, imagen de partida existente.
+  El Copywriter/SEO y el Publicador usan este título y esta descripción corta tal cual.
 
 ## 1. Inventario (sin LLM)
 
@@ -23,15 +45,15 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
 ## 2. Analista visual
 
 - **Rol:** entender el bordado a partir de su foto.
-- **Entrada:** foto del diseño + nombre de la carpeta de máquina (si existe).
+- **Entrada:** `brief.json` (imagen de partida) + nombre de la carpeta de máquina (si existe).
 - **Tareas:**
   1. Describir el motivo (personaje, objeto, estilo, texto visible), colores de hilo y tamaño aparente.
   2. Proponer ubicación en la prenda (pecho izquierdo, centro, espalda) y tamaño en cm.
   3. Elegir **≥3 colores de prenda** de `garment.colors` con buen contraste con los hilos, justificando cada uno.
   4. Detectar riesgos: marcas registradas / personajes con copyright, texto ilegible, foto de baja calidad.
 - **Salida:** `analysis.json`.
-- **Aceptación:** ≥3 colores válidos del catálogo; riesgos de propiedad intelectual marcados (bloquean la publicación
-  hasta que Diego decida).
+- **Aceptación:** ≥3 colores válidos del catálogo; si el riesgo de propiedad intelectual es `likely`, el orquestador
+  salta el diseño (queda `rejected` con el motivo) y el Curador elige otro.
 
 ## 3. Director de arte (prompts)
 
@@ -83,14 +105,10 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
 ## 6. Copywriter / SEO
 
 - **Rol:** textos de producto en español (Colombia), voz de marca xDope.
-- **Entrada:** `analysis.json`, colores aprobados, config de marca.
-- **Salida (`copy.json`):** `name`, `short_description`, `description` (HTML: diseño, bordado, material, cuidado),
+- **Entrada:** `brief.json`, `analysis.json`, colores aprobados, config de marca.
+- **Salida (`copy.json`):** `name` y `short_description` copiados del brief, `description` (HTML: diseño, bordado, material, cuidado),
   `tags`, `meta_title` (≤60), `meta_description` (≤155), `og_title`, `og_description`, `slug` sugerido.
 - **Aceptación:** sin afirmaciones falsas de material; nombres de personajes con copyright no usados si el análisis los marcó.
-
-## ✋ Revisión de Diego (antes de publicar)
-
-Resumen por diseño: mockups aprobados, textos, precio, riesgos. Diego aprueba, pide cambios o rechaza.
 
 ## 7. Publicador (sin LLM)
 
