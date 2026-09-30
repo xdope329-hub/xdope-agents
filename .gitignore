@@ -1,8 +1,25 @@
 node_modules/
 dist/
 .env
-/runs/
+.env.*
+!.env.example
+runs/
 designs.json
 schedule.json
+
+# Pipeline local (npm run pipeline)
+config/config.json
+data/
+output/
 logs/
-config/defaults.json
+out/
+
+# Nunca subir fotos de diseños, mockups ni archivos de máquina (el repo es público)
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.dst
+*.pes
+*.jef
