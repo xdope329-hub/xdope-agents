@@ -59,6 +59,7 @@ Reglas del producto:
   - "front_mid": frontal, de la cintura a la cabeza; se ve el hoodie completo con capucha y bolsillo canguro.
   - "three_quarter" o "side": 3/4 o lateral, de la cintura a la cabeza.
   - "detail": primer plano del pecho de la persona con el hoodie puesto, del esternón a la barbilla; se ven la tela afelpada, el cuello y el borde de la capucha alrededor del bordado. Nunca un parche suelto, nunca solo tela sin prenda.
+- Las 3 fotos deben verse claramente distintas: pose, ángulo de cámara y encuadre diferentes (frontal de pie; cuerpo girado 45° o de lado con otra postura de brazos; primer plano del pecho). Nunca la misma pose repetida.
 - La MISMA persona en las 3 fotos, descrita en model_description con rasgos de la cara precisos (forma de la cara, ojos, cejas, nariz, labios, tono de piel, pelo y vello facial explícito, p. ej. "clean-shaven"). Repite esos rasgos en cada prompt. Nada de flat lay ni maniquí.
 - Elige el color de hoodie de la lista que mejor contraste con los hilos del bordado y nómbralo con su descripción en inglés en cada prompt.
 - Tamaño del bordado: elige UN tamaño estándar (size_preset) según la FORMA del diseño. Los bordados reales en hoodie son pequeños o medianos; los modelos de imágenes tienden a agrandarlos.

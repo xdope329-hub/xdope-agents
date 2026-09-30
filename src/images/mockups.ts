@@ -114,7 +114,9 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
           data: o.design.data,
           mimeType: "image/jpeg",
         },
-        ...(id ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: id.data, mimeType: id.mediaType }] : []),
+        ...(id
+          ? [{ role: "Reference 2: ONLY the face and hair of the model, cropped. Use this exact same person, but create a NEW photograph with the pose, camera angle, framing and background described in the prompt. Never copy the composition of another photo.", data: id.data, mimeType: id.mediaType }]
+          : []),
         ...(placementRef
           ? [{ role: "Placement reference: ONLY shows where the embroidery sits on the hoodie and how big it is relative to the body. Copy that position and scale. Do NOT copy its person, pose, background, garment color or design.", data: placementRef, mimeType: "image/jpeg" }]
           : []),
@@ -148,7 +150,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     // La mejor foto de la primera toma es la referencia de identidad para las demás.
     if (shot === first) {
       const best = bestAttempt(attemptsOf(first));
-      if (best?.candidate) await writeFile(identityFile, await sharp(path.join(o.dir, best.candidate)).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
+      if (best?.candidate) await writeFile(identityFile, await faceCrop(path.join(o.dir, best.candidate)));
     }
   };
 
@@ -284,6 +286,20 @@ export function hoodieLine(shot: Shot, shotList: ShotList, descriptions: Record<
   const desc = descriptions[shot.color] ? `${descriptions[shot.color]}, ` : "";
   const detail = shot.framing === "detail" ? " This is a close-up of the chest of the person wearing it: the fleece fabric, the neckline and the edge of the hood are visible around the embroidery." : "";
   return `\n\nGARMENT: the person is wearing a ${shot.color} pullover hoodie (${desc}${color?.hex ?? ""}) with hood and kangaroo pocket, heavy cotton fleece. The hoodie color must be exactly this color.${detail} Never show a loose patch, a fabric swatch or an embroidery hoop.`;
+}
+
+// Referencia de identidad: solo la cabeza (parte alta central de la foto frontal). Con la foto entera, el modelo
+// copiaba la misma pose y el mismo encuadre en las otras tomas.
+export async function faceCrop(file: string): Promise<Buffer> {
+  const img = sharp(file);
+  const { width = 0, height = 0 } = await img.metadata();
+  const w = Math.round(width * 0.6);
+  const h = Math.round(height * 0.45);
+  return img
+    .extract({ left: Math.round((width - w) / 2), top: 0, width: w, height: h })
+    .resize(768, 768, { fit: "inside" })
+    .jpeg({ quality: 85 })
+    .toBuffer();
 }
 
 function bestAttempt(attempts: Attempt[]): Attempt | null {

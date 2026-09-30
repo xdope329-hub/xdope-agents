@@ -111,6 +111,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 | **Realismo del modelo** | El modelo de visión puntúa de 1 a 10 "¿pasaría por una foto real de catálogo?" con una rúbrica fija: piel, ojos, pelo, manos, caída de la tela, luz y sombras coherentes, fondo. Justifica cada punto bajo 7 | ≥ 7 |
 | Consistencia del modelo | Misma persona que la imagen de identidad (comparación de rostro con el modelo de visión) | misma persona |
 | Ubicación | Bordado en la zona pedida | coincide |
+| Encuadre y pose | La foto tiene el encuadre y la pose pedidos; las 3 fotos no repiten la misma pose. La referencia de identidad es solo la cabeza recortada de la primera foto | coincide |
 | Prenda | Una persona lleva puesto un hoodie del color pedido; nunca un parche suelto ni solo tela | presente |
 | Tamaño | Bordado del tamaño pedido, no gigante (regla 13). El prompt lo da en cm y como % del ancho del pecho | coincide (estricto) |
 | Fidelidad (visión) | Puntaje 1–10 del modelo de visión; pequeñas diferencias de tono o detalle fino se toleran (decisión de Diego, 2026-09-30), pero no una cara del diseño deformada o con otra expresión | ≥ 7 |

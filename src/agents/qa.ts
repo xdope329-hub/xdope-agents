@@ -9,6 +9,7 @@ const QaOutput = z.object({
   embroidery_fidelity: z.number().describe("1 a 10: el bordado de la foto es igual a la referencia (formas, colores de hilo, sin agregados)"),
   realism: z.number().describe("1 a 10: ¿pasaría por una foto real de catálogo?"),
   same_person: z.boolean().nullable().describe("Si hay imagen de identidad: ¿es la misma persona? Si no hay, null"),
+  framing_ok: z.boolean().describe("La foto tiene el encuadre y la pose pedidos (p. ej. cuerpo girado en 3/4, primer plano del pecho); false si repite una pose frontal cuando se pidió otra"),
   garment_present: z.boolean().describe("Hay una persona llevando puesto un hoodie (con capucha) del color pedido; false si es un parche suelto, solo tela o no hay prenda"),
   placement_ok: z.boolean(),
   size_ok: z.boolean().describe("El bordado tiene el tamaño pedido respecto al cuerpo; false si se ve gigante o mucho más grande"),
@@ -48,12 +49,13 @@ export async function runQa(opts: {
   const out = await opts.claude.ask({
     system: SYSTEM,
     images,
-    prompt: `Toma pedida: ${opts.shot.framing}, hoodie color ${opts.garmentColor}, bordado en ${opts.shot.placement}${opts.size ? ` de unos ${opts.size.w}×${opts.size.h} cm` : ""}.\nEvalúa la foto candidata.`,
+    prompt: `Toma pedida: ${opts.shot.framing}${opts.shot.pose ? ` (pose: ${opts.shot.pose})` : ""}, hoodie color ${opts.garmentColor}, bordado en ${opts.shot.placement}${opts.size ? ` de unos ${opts.size.w}×${opts.size.h} cm` : ""}.\nEvalúa la foto candidata.`,
     schema: QaOutput,
   });
   const passed =
     out.embroidery_fidelity >= QA_THRESHOLDS.fidelity &&
     out.realism >= QA_THRESHOLDS.realism &&
+    out.framing_ok &&
     out.garment_present &&
     out.placement_ok &&
     out.size_ok &&
