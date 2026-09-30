@@ -11,6 +11,11 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
 - Corre programado (o con `npm run pipeline`): ejecuta Inventario, luego el Curador creativo, y encadena los agentes
   2–7 por cada diseño elegido, sin intervención manual.
 - Reintenta pasos fallidos, respeta `imageGen.maxCostPerDesignUsd` y registra el resultado de cada diseño en el catálogo.
+- **Modo batch (ahorro ~50 %):** los pasos con LLM y la generación de imágenes se envían por lotes (Anthropic Message
+  Batches y Gemini Batch API). Cada ejecución: (a) recoge los lotes terminados y avanza esos diseños al siguiente paso,
+  (b) envía los lotes nuevos. Un diseño tarda horas en completarse (hasta 24 h por lote), no minutos.
+- **Modelos Claude por costo:** Haiku para Copywriter y primer filtro de QA; Sonnet para Curador, Analista, Director de
+  arte y QA final. Instrucciones fijas de cada agente con prompt caching.
 
 ---
 
@@ -70,26 +75,38 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
   5. **Fotorrealismo:** describir la toma como fotografía real (cámara y lente, p. ej. "35 mm, f/2.8", luz natural o de
      estudio, textura de piel natural con poros, cabello con mechones sueltos, pliegues reales de la tela), modelos
      diversos y creíbles de 20–35 años con pose y expresión naturales. Formato vertical 4:5.
+  6. Usar uno de los **modelos de la casa** (`houseModels`: fotos de referencia de 4–6 personas generadas y aprobadas
+     una sola vez) como referencia de persona, rotándolos entre productos.
 - **Salida:** `prompts.json`.
-- **Aceptación:** ≥9 prompts (≥3 colores × ≥3 tomas), cada uno con imagen de referencia adjunta.
+- **Aceptación:** un prompt por color para cada toma con IA (≥3), cada uno con la foto del bordado y el modelo de la
+  casa como referencias.
 
-### Tomas mínimas (configurables)
+### Tomas mínimas (configurables) y cómo se producen
 
-| Toma | Descripción |
-|---|---|
-| `model_front` | Modelo usando el hoodie, frontal, estilo lifestyle/estudio |
-| `embroidery_closeup` | Primer plano del bordado mostrando textura de hilo |
-| `garment_flat` | Prenda sola (flat lay o ghost mannequin), fondo neutro |
-| `model_alt` (opcional) | Modelo de perfil/espalda o en otra pose |
+Solo las fotos con modelo usan la API de imágenes; el resto se hace localmente, sin costo.
+
+| Toma | Descripción | Fuente |
+|---|---|---|
+| `model_front` | Modelo usando el hoodie, frontal, estilo lifestyle/estudio | API de imágenes (batch) |
+| `embroidery_closeup` | Primer plano del bordado mostrando textura de hilo | Recorte de la foto original (es un bordado real) |
+| `garment_flat` | Prenda sola, fondo neutro | Compositor local sobre foto base del hoodie en ese color |
+| `model_alt` (opcional) | Modelo de perfil/espalda o en otra pose | API de imágenes (batch) |
 
 ## 4. Generador de mockups (sin LLM)
 
-- **Rol:** llamar a la API de imágenes.
-- **Entrada:** `prompts.json` + foto del diseño (y, opcional, mockups base de `MockUps-pack/Own`).
-- **Tareas:** generar cada imagen, guardar en `output/<id>/mockups/<color>_<toma>_v<n>.png`, registrar costo y semilla,
-  exportar versión para tienda (webp/jpg ≤ 10 MB, 4:5 1080×1350 o 1:1 1080×1080 como mínimo).
+- **Rol:** producir las imágenes de cada color.
+- **Entrada:** `prompts.json`, foto del diseño, `houseModels`, bases de prenda por color (`garment.flatBases`, p. ej.
+  de `MockUps-pack/Own` o fotos propias tomadas una vez por color).
+- **Tareas:**
+  1. **Tomas con modelo:** enviarlas en lote a `imageGen.provider` (Gemini Batch). Las que QA rechace se regeneran una
+     sola vez en tiempo real con `imageGen.fallback` (FLUX.2 Pro).
+  2. **Primer plano:** recortar y ajustar el bordado de la foto original a 1080×1350.
+  3. **Prenda sola:** componer localmente (Sharp) el bordado recortado sobre la base del color, con máscara, sombra
+     suave y relieve para simular puntada, en la ubicación y tamaño del análisis. Es liviano; corre en cualquier PC.
+  4. Guardar en `output/<id>/mockups/<color>_<toma>_v<n>.png`, registrar costo y exportar versión para tienda
+     (webp/jpg ≤ 10 MB, 4:5 1080×1350 como mínimo).
 - **Salida:** imágenes + `generation.json`.
-- **Aceptación:** una imagen por prompt; errores de API reintentados con backoff.
+- **Aceptación:** ≥3 tomas por color; errores de API reintentados con backoff.
 
 ## 5. QA visual
 
@@ -105,7 +122,8 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
     que se funde con la persona. El QA revisa la imagen a resolución completa y hace zoom a cara, manos y bordado.
   - Consistencia entre tomas del mismo color.
 - **Tareas:** si rechaza, devuelve motivo concreto al Director de arte para ajustar el prompt y regenerar
-  (máx. `qa.maxRetries`). Si se agota, marca el color como fallido y, si quedan <3 colores, marca el diseño para revisión manual.
+  (máx. `qa.maxRetries`). Si se agota, marca el color como fallido y, si quedan <3 colores, el diseño queda `rejected`
+  y el Curador elige otro (hay más de 2.700 diseños; no vale la pena insistir con uno difícil).
 - **Salida:** `qa.json`.
 - **Aceptación:** ≥3 colores con ≥3 tomas aprobadas cada uno.
 

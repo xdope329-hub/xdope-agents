@@ -18,11 +18,19 @@ Precios públicos consultados en septiembre de 2026 (verificar antes de contrata
 Prioridad definida por Diego: vertical 4:5 (1080×1350), calidad decente (no la máxima) y **modelos que parezcan
 personas reales**.
 
-1. **Principal: FLUX.2 Pro.** Es el más fuerte en fotorrealismo de personas y de los más baratos a 1080×1350
-   (~$0.05–0.07 por imagen con la foto del bordado como referencia; ~$0.60–0.80 por diseño). Hasta 8 referencias:
-   foto del bordado + primera toma generada para mantener el mismo modelo.
-2. **Respaldo: Gemini 3.1 Flash Image**, cuando FLUX no reproduzca bien el bordado (~$0.10 por imagen).
-3. Se descartan Gemini 3 Pro Image (más caro de lo necesario) y GPT Image 2 queda solo en la prueba comparativa.
+Decisión de costo (Diego eligió el modo batch):
+
+1. **Principal: Gemini 3.1 Flash Image por Batch API** (50 % de descuento, resultados en ≤24 h): ~$0.05 por imagen
+   a 1080×1350. Acepta la foto del bordado + el modelo de la casa como referencias.
+2. **Respaldo: FLUX.2 Pro en tiempo real** (~$0.05–0.07), solo para regenerar las tomas que QA rechace por realismo
+   o fidelidad del bordado.
+3. Solo las fotos con modelo usan IA (≥3 por diseño); el primer plano sale de la foto original y la prenda sola de un
+   compositor local.
+
+Costo estimado por diseño: ~4 imágenes con IA (3 + reintentos) ≈ $0.20–0.25, más Claude en batch con Haiku/Sonnet
+≈ $0.05–0.10 → **~$0.25–0.35 por producto** (antes ~$0.75–1.00).
+
+Se descartan Gemini 3 Pro Image (más caro de lo necesario); GPT Image 2 queda solo en la prueba comparativa.
 3. Implementar el Generador detrás de una interfaz `generate({ prompt, referenceImages, size, seed })` para cambiar de
    proveedor por config sin tocar los agentes.
 
