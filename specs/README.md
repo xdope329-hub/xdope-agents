@@ -24,3 +24,6 @@ Sin intervención de Diego, el sistema elige un diseño de la carpeta, le pone t
 - al menos 3 colores × 3 fotos (9+ mockups generados con API) del mismo modelo o prenda, con el bordado fiel al original,
 - ficha de producto completa (título, descripción, variantes, tags, SEO),
 - un producto inactivo creado en xdopestore-api, listo para que Diego lo active con un clic desde el admin-dashboard.
+
+## Implementación actual
+El pipeline que corre hoy es `npm run pipeline` (`src/pipeline.cjs`, traído de `xdope-product-agents`), documentado en `docs/agentes.md`. Donde ese pipeline y estas specs no coincidan, mandan las specs y la diferencia se corrige en el código.

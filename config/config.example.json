@@ -1,0 +1,205 @@
+{
+  "catalog": {
+    "photoDirs": [
+      "C:/Users/Diego Benavides/Desktop/Embroidery supper pack/1. JUST PHOTOS of all designs"
+    ],
+    "designDirs": [
+      "C:/Users/Diego Benavides/Desktop/Embroidery supper pack/2. Embroidery Designs"
+    ],
+    "output": "data/catalog.json"
+  },
+  "batch": {
+    "designsPerRun": 3,
+    "preferWithMachineFiles": true
+  },
+  "garment": {
+    "type": "hoodie",
+    "minColors": 3,
+    "colors": [
+      {
+        "key": "negro",
+        "label": "Negro",
+        "hex": "#111111"
+      },
+      {
+        "key": "blanco",
+        "label": "Blanco",
+        "hex": "#F5F5F5"
+      },
+      {
+        "key": "gris_jaspeado",
+        "label": "Gris jaspeado",
+        "hex": "#9E9E9E"
+      },
+      {
+        "key": "azul_marino",
+        "label": "Azul marino",
+        "hex": "#1B2A49"
+      },
+      {
+        "key": "arena",
+        "label": "Arena",
+        "hex": "#D8C8A8"
+      },
+      {
+        "key": "verde_militar",
+        "label": "Verde militar",
+        "hex": "#4B5320"
+      }
+    ],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "flatBases": {
+      "negro": null,
+      "blanco": null,
+      "gris_jaspeado": null,
+      "azul_marino": null,
+      "arena": null,
+      "verde_militar": null
+    }
+  },
+  "shots": {
+    "model_front": "ai",
+    "garment_flat": "ai",
+    "embroidery_closeup": "crop_original"
+  },
+  "style": "Fotografía de producto de estudio, luz suave, fondo neutro, estética streetwear",
+  "llm": {
+    "mode": "batch",
+    "promptCaching": true,
+    "models": {
+      "default": "claude-sonnet-5-5",
+      "copywriter": "claude-haiku-4-5-20251001",
+      "qaPrefilter": "claude-haiku-4-5-20251001"
+    }
+  },
+  "imageGen": {
+    "provider": "google",
+    "model": "gemini-3.1-flash-image",
+    "mode": "batch",
+    "fallback": {
+      "provider": "bfl",
+      "model": "flux-2-pro",
+      "mode": "realtime"
+    },
+    "size": "1080x1350",
+    "minShortSidePx": 1080,
+    "maxCostPerDesignUsd": 0.6
+  },
+  "qa": {
+    "minScore": 4,
+    "maxRetries": 1
+  },
+  "store": {
+    "price": 0,
+    "categorySlugs": [
+      "hoodies"
+    ],
+    "taxName": "IVA",
+    "sizeChartAttachmentId": null,
+    "status": 0,
+    "stockPerVariant": 10
+  },
+  "houseModels": [],
+  "taxonomy": {
+    "themes": [
+      {
+        "name": "Anime",
+        "slug": "anime"
+      },
+      {
+        "name": "Animales",
+        "slug": "animales"
+      },
+      {
+        "name": "Videojuegos",
+        "slug": "videojuegos"
+      },
+      {
+        "name": "Películas y series",
+        "slug": "peliculas-series"
+      },
+      {
+        "name": "Caricaturas",
+        "slug": "caricaturas"
+      },
+      {
+        "name": "Música",
+        "slug": "musica"
+      },
+      {
+        "name": "Deportes",
+        "slug": "deportes"
+      },
+      {
+        "name": "Frases y lettering",
+        "slug": "frases-lettering"
+      },
+      {
+        "name": "Naturaleza",
+        "slug": "naturaleza"
+      },
+      {
+        "name": "Dark y calaveras",
+        "slug": "dark-calaveras"
+      },
+      {
+        "name": "Fantasía",
+        "slug": "fantasia"
+      },
+      {
+        "name": "Humor y memes",
+        "slug": "humor-memes"
+      },
+      {
+        "name": "Autos y motos",
+        "slug": "autos-motos"
+      },
+      {
+        "name": "Minimalista",
+        "slug": "minimalista"
+      }
+    ],
+    "maxThemesPerProduct": 2,
+    "minConfidence": 0.7,
+    "fallback": "minimalista",
+    "createMissingAsChildOf": "hoodies"
+  },
+  "schedule": {
+    "timezone": "America/Bogota",
+    "taskFolder": "xdope-agents",
+    "runs": [
+      {
+        "days": [
+          "lun",
+          "mie",
+          "vie"
+        ],
+        "times": [
+          "09:00"
+        ],
+        "designsPerRun": 3
+      },
+      {
+        "days": [
+          "sab"
+        ],
+        "times": [
+          "10:00",
+          "16:00"
+        ],
+        "designsPerRun": 2
+      }
+    ],
+    "collectEveryHours": 3
+  },
+  "ipPolicy": "flag",
+  "pipeline": {
+    "mode": "batch",
+    "publish": false
+  }
+}
