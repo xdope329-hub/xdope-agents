@@ -82,7 +82,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     const id = shot === first ? null : await identity();
     return {
       model,
-      prompt: `${shot.prompt}${sizeLine(o.shotList)}\n\nAvoid: ${shot.negative_prompt}${fix}`,
+      prompt: `${shot.prompt}${sizeLine(o.shotList)}${FACE_LINE}\n\nAvoid: ${shot.negative_prompt}${fix}`,
       refs: [
         { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: o.design.data, mimeType: "image/jpeg" },
         ...(id ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: id.data, mimeType: id.mediaType }] : []),
@@ -196,6 +196,10 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
   }
   return { kind: "done", results, imageCost: progress.image_cost_usd };
 }
+
+// Los bordados suelen ser personajes o retratos: la cara es lo primero que se deforma.
+const FACE_LINE =
+  "\n\nFACE DETAILS OF THE DESIGN: if the embroidery shows a face or character, keep every facial detail exactly as in the reference: eyes, eyebrows, glasses, nose, mouth, facial hair, skin tone, expression and the lines that define them. Do not simplify, redraw, beautify or change the expression of the embroidered face.";
 
 // Tamaño del bordado en términos que el modelo de imágenes respeta mejor que solo centímetros:
 // proporción del ancho del pecho (un hoodie de adulto mide unos 55 cm de ancho a la altura del pecho).

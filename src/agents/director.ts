@@ -48,6 +48,7 @@ Cómo escribir cada prompt (en inglés, que el modelo de imágenes sigue mejor):
 - Describe a la persona modelo con los mismos rasgos en todas las tomas, la pose y el hoodie (color exacto, algodón afelpado grueso, pliegues reales).
 - Ubicación y tamaño del bordado en centímetros, proporcionado al cuerpo de la persona.
 - Pide que el bordado sea "raised thread embroidery that reproduces the reference image exactly: same shapes, same thread colors, no additions".
+- Si el diseño tiene una cara o personaje, describe sus rasgos (ojos, cejas, gafas, boca, barba, tono de piel, expresión) y pide mantenerlos exactos.
 - Textura de bordado visible siempre: "visible satin and fill stitches, stitch direction, thread sheen, slightly raised relief and subtle fabric puckering around the edges; it must look stitched, never printed". En la toma "detail" la textura de las puntadas es lo principal.
 - Realismo: textura de piel natural con poros e imperfecciones leves, mechones de pelo sueltos, manos naturales, luz y sombras coherentes, fondo real.
 - negative_prompt: extra text or letters, printed or flat graphic, screen print, oversized embroidery, embroidery covering the whole chest, added logos, plastic or airbrushed skin, 3D render or illustration look, perfect symmetry, deformed hands, extra fingers, glassy eyes, fake bokeh.
