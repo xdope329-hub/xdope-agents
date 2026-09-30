@@ -79,7 +79,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
         const candidate = `mockups/${shot.shot_id}/candidate_${attempt + 1}.jpg`;
         await mkdir(path.join(o.dir, "mockups", shot.shot_id), { recursive: true });
         await writeFile(path.join(o.dir, candidate), data);
-        const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity, shot, garmentColor: shot.color });
+        const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity, shot, garmentColor: shot.color, size: o.shotList.analysis.embroidery_size_cm });
         result.attempts.push({ model: img.batch ? `${model} (batch)` : model, candidate, cost_usd: img.cost_usd, qa });
         const score = qa.embroidery_fidelity + qa.realism;
         if (!best || score > best.score) best = { data, qa, score };

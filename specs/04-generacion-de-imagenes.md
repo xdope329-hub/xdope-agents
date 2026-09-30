@@ -45,7 +45,7 @@ Producto
    ▼
 A. Imagen de identidad: el modelo (o la prenda) definido en el concepto, generado una vez
    │
-   ▼  por cada toma (≥ 3 colores × ≥ 3 tomas), en paralelo
+   ▼  por cada toma (1 color × 3 tomas), en paralelo
 B. Generación multi-referencia: bordado recortado (objeto) + identidad (personaje)
    + prompt y prompt negativo → 2 candidatas
    │

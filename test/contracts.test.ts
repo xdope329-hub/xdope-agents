@@ -17,35 +17,43 @@ const shotsFor = (c: string) => [shot(c, "front_mid", 1), shot(c, "three_quarter
 
 const base = {
   run_id: "r1",
-  analysis: { subject: "Calcifer", style: "anime", thread_palette: ["#F2C230"], has_text: false, best_placement: "chest_left" },
+  analysis: { subject: "Calcifer", style: "anime", thread_palette: ["#F2C230"], has_text: false, best_placement: "chest_left", embroidery_size_cm: { w: 9, h: 8 } },
   concept: { type: "model", description: "hombre 25-30, streetwear" },
-  colors: [color("Negro", "#111111"), color("Hueso", "#EDE6D6"), color("Verde", "#2F4F3A")],
-  shots: [...shotsFor("Negro"), ...shotsFor("Hueso"), ...shotsFor("Verde")],
+  colors: [color("Negro", "#111111")],
+  shots: shotsFor("Negro"),
 };
 
 describe("ShotList", () => {
-  it("acepta 3 colores × 3 tomas con detalle", () => {
+  it("acepta 1 color × 3 tomas con detalle", () => {
     expect(ShotList.safeParse(base).success).toBe(true);
   });
 
-  it("rechaza menos de 3 colores", () => {
-    const r = ShotList.safeParse({ ...base, colors: base.colors.slice(0, 2), shots: base.shots.slice(0, 6) });
+  it("rechaza más de 1 color", () => {
+    const r = ShotList.safeParse({ ...base, colors: [...base.colors, color("Hueso", "#EDE6D6")], shots: [...base.shots, ...shotsFor("Hueso")] });
     expect(r.success).toBe(false);
   });
 
   it("rechaza un color con menos de 3 tomas", () => {
-    const r = ShotList.safeParse({ ...base, shots: base.shots.slice(0, 8) });
+    const r = ShotList.safeParse({ ...base, shots: base.shots.slice(0, 2) });
     expect(r.success).toBe(false);
   });
 
   it("rechaza un color sin toma de detalle", () => {
-    const shots = base.shots.map((s) => (s.shot_id === "Verde-3" ? { ...s, framing: "lifestyle" } : s));
+    const shots = base.shots.map((s) => (s.shot_id === "Negro-3" ? { ...s, framing: "lifestyle" } : s));
     expect(ShotList.safeParse({ ...base, shots }).success).toBe(false);
   });
 
   it("rechaza colores sin contraste suficiente", () => {
-    const colors = base.colors.map((c) => (c.name === "Negro" ? { ...c, contrast_ok: false } : c));
+    const colors = base.colors.map((c) => ({ ...c, contrast_ok: false }));
     expect(ShotList.safeParse({ ...base, colors }).success).toBe(false);
+  });
+
+  it("limita el tamaño del bordado: 12 cm a la izquierda, 20 × 20 cm centrado", () => {
+    const withSize = (best_placement: string, w: number, h: number) => ShotList.safeParse({ ...base, analysis: { ...base.analysis, best_placement, embroidery_size_cm: { w, h } } }).success;
+    expect(withSize("chest_left", 13, 10)).toBe(false);
+    expect(withSize("chest_center", 18, 20)).toBe(true);
+    expect(withSize("chest_center", 22, 18)).toBe(false);
+    expect(withSize("back", 10, 10)).toBe(false);
   });
 });
 

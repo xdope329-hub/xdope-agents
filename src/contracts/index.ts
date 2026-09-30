@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-export const MIN_COLORS = 3;
+// Constitución, reglas 12 y 13: 1 color × 3 fotos; bordado pequeño a la izquierda o centrado, nunca más de 20 × 20 cm.
+export const MIN_COLORS = 1;
+export const MAX_COLORS = 1;
+export const MAX_HOOP_CM = 20;
+export const MAX_CHEST_LEFT_CM = 12;
 export const MIN_SHOTS_PER_COLOR = 3;
 export const MAX_SECONDARY_CATEGORIES = 2;
 export const MIN_CATEGORY_CONFIDENCE = 0.6;
@@ -42,7 +46,7 @@ export const ProductBrief = z.object({
     weight_gsm: z.number().positive().optional(),
     fit: z.string().optional(),
   }),
-  // Diego puede fijar colores; el Director de arte completa hasta MIN_COLORS.
+  // Diego puede fijar el color; si no, lo elige el Director de arte.
   colors: z.array(ColorRef).default([]),
   sizes: z.array(z.object({ name: z.string().min(1), attribute_value_id: z.string().min(1) })).min(1),
   price: z.object({ amount: z.number().positive(), sale_price: z.number().positive().nullable().default(null) }),
@@ -148,16 +152,27 @@ export const ShotList = z
       thread_palette: z.array(hex).min(1),
       has_text: z.boolean(),
       best_placement: Placement,
+      embroidery_size_cm: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
     }),
     concept: z.object({
       type: z.enum(["model", "flat_lay", "hanging", "ghost_mannequin"]),
       description: z.string().min(1),
       identity_ref: z.string().nullable().default(null),
     }),
-    colors: z.array(ColorRef.extend({ contrast_ok: z.boolean() })).min(MIN_COLORS),
+    colors: z.array(ColorRef.extend({ contrast_ok: z.boolean() })).min(MIN_COLORS).max(MAX_COLORS),
     shots: z.array(Shot),
   })
   .superRefine((list, ctx) => {
+    const { best_placement: placement, embroidery_size_cm: size } = list.analysis;
+    if (placement !== "chest_left" && placement !== "chest_center") {
+      ctx.addIssue({ code: "custom", path: ["analysis", "best_placement"], message: "El bordado va en chest_left o chest_center" });
+    }
+    if (size) {
+      const max = placement === "chest_left" ? MAX_CHEST_LEFT_CM : MAX_HOOP_CM;
+      if (size.w > max || size.h > max) {
+        ctx.addIssue({ code: "custom", path: ["analysis", "embroidery_size_cm"], message: `Bordado de ${size.w}×${size.h} cm; en ${placement} el máximo es ${max}×${max} cm` });
+      }
+    }
     const colorNames = new Set(list.colors.map((c) => c.name));
     list.colors.forEach((c, i) => {
       if (!c.contrast_ok) {

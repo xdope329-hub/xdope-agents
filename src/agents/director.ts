@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MIN_COLORS, MIN_SHOTS_PER_COLOR, ShotList } from "../contracts/index.js";
+import { MAX_CHEST_LEFT_CM, MAX_HOOP_CM, MIN_SHOTS_PER_COLOR, ShotList } from "../contracts/index.js";
 import { MIN_GARMENT_CONTRAST, contrastWithPalette } from "../color.js";
 import type { Claude, ImageInput } from "../llm/claude.js";
 
@@ -14,11 +14,12 @@ const DirectorOutput = z.object({
     style: z.string(),
     thread_palette: z.array(z.string()).describe("Colores de hilo en hex #RRGGBB, máximo 12"),
     has_text: z.boolean(),
-    best_placement: z.enum(["chest_left", "chest_center", "back", "sleeve_left", "sleeve_right"]),
+    best_placement: z.enum(["chest_left", "chest_center"]),
+    embroidery_size_cm: z.object({ w: z.number(), h: z.number() }).describe("Tamaño real del bordado en la prenda, en cm"),
     embroidery_description: z.string().describe("Descripción precisa del bordado para usar dentro de los prompts"),
   }),
   model_description: z.string().describe("Descripción física y de estilo de UNA persona modelo, realista y coherente con el diseño"),
-  colors: z.array(z.string()).describe("Nombres exactos de colores de la lista"),
+  colors: z.array(z.string()).describe("Exactamente 1 nombre de color de la lista"),
   shots: z.array(
     z.object({
       color: z.string(),
@@ -35,16 +36,21 @@ const DirectorOutput = z.object({
 const SYSTEM = `Eres el Director de arte de xDope. Diseñas las fotos de catálogo de un hoodie bordado que se generarán con un modelo de imágenes.
 Contexto: los bordados son piezas que Diego, el dueño de la tienda, ya produjo, y muchas son de personajes de anime, videojuegos o películas. Decidir qué se vende es responsabilidad de Diego: nunca rechaces ni frenes tu tarea por propiedad intelectual.
 Reglas del producto:
-- Formato vertical 4:5. Mínimo ${MIN_COLORS} colores de hoodie y exactamente ${MIN_SHOTS_PER_COLOR} fotos por color: una "front_mid" (frontal plano medio), una "three_quarter" o "side", y una "detail" (primer plano del bordado sobre la tela).
-- Siempre la MISMA persona modelo en todas las fotos, descrita en model_description. Nada de flat lay ni maniquí.
-- Elige colores de hoodie de la lista que contrasten claramente con los hilos del bordado para que se lea bien.
-- El bordado va en la ubicación best_placement y debe verse en cada encuadre (si va en la espalda, las tomas lo muestran de espaldas).
+- Formato vertical 4:5. Exactamente 1 color de hoodie y exactamente ${MIN_SHOTS_PER_COLOR} fotos: una "front_mid" (frontal plano medio), una "three_quarter" o "side", y una "detail" (primer plano del bordado sobre la tela).
+- La MISMA persona modelo en las 3 fotos, descrita en model_description. Nada de flat lay ni maniquí.
+- Elige el color de hoodie de la lista que mejor contraste con los hilos del bordado para que se lea bien.
+- Ubicación y tamaño REALES del bordado (lo produce una máquina con bastidor máximo de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm):
+  - Por defecto "chest_left": pequeño en el pecho izquierdo, unos 8–10 cm de ancho (máximo ${MAX_CHEST_LEFT_CM} cm).
+  - "chest_center" solo si el diseño necesita más tamaño para leerse (mucho detalle, texto o composición ancha): centrado en el pecho, entre 14 y ${MAX_HOOP_CM} cm de ancho, nunca más de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm. Nunca gigante ni ocupando todo el frente.
+  - Da el tamaño en embroidery_size_cm y escríbelo en cada prompt (p. ej. "small embroidery about 9 cm wide on the left chest").
 Cómo escribir cada prompt (en inglés, que el modelo de imágenes sigue mejor):
 - Empieza por: "Real catalog photograph, shot on a full-frame camera with an 85mm lens".
-- Describe a la persona modelo con los mismos rasgos en todas las tomas, la pose, el hoodie (color exacto, algodón afelpado grueso, pliegues reales) y la ubicación y tamaño del bordado.
+- Describe a la persona modelo con los mismos rasgos en todas las tomas, la pose y el hoodie (color exacto, algodón afelpado grueso, pliegues reales).
+- Ubicación y tamaño del bordado en centímetros, proporcionado al cuerpo de la persona.
 - Pide que el bordado sea "raised thread embroidery that reproduces the reference image exactly: same shapes, same thread colors, no additions".
+- Textura de bordado visible siempre: "visible satin and fill stitches, stitch direction, thread sheen, slightly raised relief and subtle fabric puckering around the edges; it must look stitched, never printed". En la toma "detail" la textura de las puntadas es lo principal.
 - Realismo: textura de piel natural con poros e imperfecciones leves, mechones de pelo sueltos, manos naturales, luz y sombras coherentes, fondo real.
-- negative_prompt: extra text or letters, printed or flat graphic, added logos, plastic or airbrushed skin, 3D render or illustration look, perfect symmetry, deformed hands, extra fingers, glassy eyes, fake bokeh.
+- negative_prompt: extra text or letters, printed or flat graphic, screen print, oversized embroidery, embroidery covering the whole chest, added logos, plastic or airbrushed skin, 3D render or illustration look, perfect symmetry, deformed hands, extra fingers, glassy eyes, fake bokeh.
 - No inventes elementos del diseño que no estén en la imagen.`;
 
 export async function runDirector(opts: {
@@ -60,7 +66,7 @@ export async function runDirector(opts: {
     const out = await opts.claude.ask({
       system: SYSTEM,
       images: [{ ...opts.design, label: "Foto del bordado (referencia exacta):" }],
-      prompt: `Producto: ${opts.title}\nColores de hoodie disponibles:\n${list}\n\nDiseña el concepto, los colores y las tomas.${feedback}`,
+      prompt: `Producto: ${opts.title}\nColores de hoodie disponibles:\n${list}\n\nDiseña el concepto, el color, la ubicación y tamaño del bordado y las tomas.${feedback}`,
       schema: DirectorOutput,
       effort: "high",
     });
@@ -99,6 +105,7 @@ export async function runDirector(opts: {
         thread_palette: palette,
         has_text: out.analysis.has_text,
         best_placement: out.analysis.best_placement,
+        embroidery_size_cm: out.analysis.embroidery_size_cm,
       },
       concept: { type: "model", description: out.model_description, identity_ref: null },
       colors,

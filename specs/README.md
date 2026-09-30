@@ -21,7 +21,7 @@ Estos documentos son la **fuente de verdad**. El código de los agentes se escri
 
 ## Resultado esperado (definición de "hecho" del sistema)
 Sin intervención de Diego, el sistema elige un diseño de la carpeta, le pone título y descripción corta, y entrega **en un solo lote**:
-- al menos 3 colores × 3 fotos (9+ mockups generados con API) del mismo modelo o prenda, con el bordado fiel al original,
+- 1 color × 3 fotos (3 mockups generados con API) del mismo modelo o prenda, con el bordado fiel al original,
 - ficha de producto completa (título, descripción, variantes, tags, SEO),
 - un producto inactivo creado en xdopestore-api, listo para que Diego lo active con un clic desde el admin-dashboard.
 

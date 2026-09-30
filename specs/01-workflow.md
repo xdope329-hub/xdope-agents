@@ -10,7 +10,7 @@
  [2] Preparación del diseño ──► DesignAsset (bordado recortado, máscara, paleta de hilos)
               │
               ▼
- [3] Director de arte y prompts ──► ShotList (≥3 colores × ≥3 tomas, con prompt por toma)
+ [3] Director de arte y prompts ──► ShotList (1 color × 3 tomas, con prompt por toma)
               │
               ▼
  [4] Generador de mockups ──► MockupSet (candidatas por toma)

@@ -1,6 +1,6 @@
 # xdope-agents
 
-Sistema de agentes que convierte una foto de un bordado en un producto listo en la tienda xDope: 3+ colores × 3+ mockups generados con IA, ficha completa y producto creado inactivo para que Diego lo active.
+Sistema de agentes que convierte una foto de un bordado en un producto listo en la tienda xDope: 1 color × 3 mockups generados con IA (bordado de tamaño real, máx. 20 × 20 cm), ficha completa y producto creado inactivo para que Diego lo active.
 
 Las fotos de `1. JUST PHOTOS of all designs` son **solo el insumo**: nunca se suben a la tienda. Lo que se publica son los mockups generados.
 

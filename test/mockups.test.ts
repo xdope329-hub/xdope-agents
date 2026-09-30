@@ -27,7 +27,7 @@ const shotList: ShotList = {
   colors: [{ name: "Negro", attribute_value_id: "x", hex: "#151515", contrast_ok: true }],
   shots: [shot("n-1", "Negro", "front_mid"), shot("n-2", "Negro", "side"), shot("n-3", "Negro", "detail")],
 };
-const claude = { ask: async () => ({ embroidery_fidelity: 9, realism: 9, same_person: true, placement_ok: true, garment_color_ok: true, extra_text: false, reasons: [] }) } as unknown as Claude;
+const claude = { ask: async () => ({ embroidery_fidelity: 9, realism: 9, same_person: true, placement_ok: true, size_ok: true, stitch_texture_visible: true, garment_color_ok: true, extra_text: false, reasons: [] }) } as unknown as Claude;
 
 function fakeGemini(batchState: { value: string }) {
   const calls = { generate: 0, submit: 0, check: 0 };
