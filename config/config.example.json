@@ -103,5 +103,69 @@
     "sizeChartAttachmentId": null,
     "status": 0
   },
-  "houseModels": []
+  "houseModels": [],
+  "taxonomy": {
+    "themes": [
+      {
+        "name": "Anime",
+        "slug": "anime"
+      },
+      {
+        "name": "Animales",
+        "slug": "animales"
+      },
+      {
+        "name": "Videojuegos",
+        "slug": "videojuegos"
+      },
+      {
+        "name": "Películas y series",
+        "slug": "peliculas-series"
+      },
+      {
+        "name": "Caricaturas",
+        "slug": "caricaturas"
+      },
+      {
+        "name": "Música",
+        "slug": "musica"
+      },
+      {
+        "name": "Deportes",
+        "slug": "deportes"
+      },
+      {
+        "name": "Frases y lettering",
+        "slug": "frases-lettering"
+      },
+      {
+        "name": "Naturaleza",
+        "slug": "naturaleza"
+      },
+      {
+        "name": "Dark y calaveras",
+        "slug": "dark-calaveras"
+      },
+      {
+        "name": "Fantasía",
+        "slug": "fantasia"
+      },
+      {
+        "name": "Humor y memes",
+        "slug": "humor-memes"
+      },
+      {
+        "name": "Autos y motos",
+        "slug": "autos-motos"
+      },
+      {
+        "name": "Minimalista",
+        "slug": "minimalista"
+      }
+    ],
+    "maxThemesPerProduct": 2,
+    "minConfidence": 0.7,
+    "fallback": "minimalista",
+    "createMissingAsChildOf": "hoodies"
+  }
 }

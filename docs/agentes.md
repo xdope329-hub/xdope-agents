@@ -30,9 +30,17 @@ LLM para razonamiento y visión: Claude (API de Anthropic). Generación de imág
   2. Elegir la **imagen de partida** (principal o una de `extra_photos`), la más clara para usar como referencia.
   3. Redactar el **título del producto** (corto, memorable, en español; sin nombres con copyright).
   4. Redactar una **descripción corta creativa** (1–2 frases, voz de marca xDope).
-  5. Marcar el diseño como `in_progress` y pasar el brief al Analista visual.
+  5. **Categorizar** el producto mirando la imagen:
+     - Categoría de prenda fija (`store.categorySlugs`, p. ej. Hoodies).
+     - **Una categoría temática principal** de `taxonomy.themes` (Anime, Animales, Videojuegos, …) y hasta una
+       secundaria si aplica claramente (p. ej. un gato samurái: Animales + Anime).
+     - Tags específicos (tema, estilo, colores del bordado; nombres de franquicia solo como tag interno si el
+       riesgo de IP lo permite).
+     - Si ningún tema encaja con confianza ≥ 0.7, usar `taxonomy.fallback` y dejarlo anotado.
+  6. Marcar el diseño como `in_progress` y pasar el brief al Analista visual.
 - **Salida:** `brief.json`.
-- **Aceptación:** título único en la tienda, descripción corta ≤ 200 caracteres, imagen de partida existente.
+- **Aceptación:** título único en la tienda, descripción corta ≤ 200 caracteres, imagen de partida existente,
+  categoría temática de `taxonomy.themes` con su confianza y justificación.
   El Copywriter/SEO y el Publicador usan este título y esta descripción corta tal cual.
 
 ## 1. Inventario (sin LLM)
@@ -142,10 +150,14 @@ Solo las fotos con modelo usan la API de imágenes; el resto se hace localmente,
   1. `POST /login` con el usuario de servicio → JWT.
   2. Subir cada mockup aprobado con `POST /attachment` → ids.
   3. Buscar o crear los valores de los atributos **Color** (con `hex_color`) y **Talla** (`GET/PUT /attribute`).
-  4. `POST /product` con `type: "classified"`, `status: 0`, categorías/impuesto de la config,
+  4. Resolver las categorías del brief contra `GET /category` (por slug). Si una categoría temática de
+     `taxonomy.themes` aún no existe en la tienda, crearla con `POST /category` como hija de la categoría de prenda.
+     Solo se crean categorías de esa lista; nunca nombres inventados.
+  5. `POST /product` con `type: "classified"`, `status: 0`, `categories` = prenda + temáticas, `tags` del brief,
+     impuesto de la config,
      `product_thumbnail_id` = `model_front` del primer color, `product_images` = todas,
      `size_chart_image_id` de la config y una variación por Color × Talla con `variation_images` = mockups de ese color.
-  5. SKU: `XD-HOOD-<id>-<COLOR>-<TALLA>`.
+  6. SKU: `XD-HOOD-<id>-<COLOR>-<TALLA>`.
 - **Salida:** `publish.json` con `product_id`, slug y enlace al dashboard; catálogo marcado `published`.
 - **Aceptación:** el producto aparece en el dashboard como inactivo con todas las variantes e imágenes.
   Nunca publica con `status: 1`: activar es decisión de Diego.

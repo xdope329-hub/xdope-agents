@@ -28,6 +28,11 @@
   "title": "Hoodie Sensei Bordado",
   "short_description": "Disciplina, calma y actitud: un bordado que se lleva con orgullo.",
   "selection_reason": "Foto nítida, diseño limpio, archivos DST/PES disponibles, sin marcas visibles",
+  "categories": {
+    "garment": ["hoodies"],
+    "themes": [{ "slug": "anime", "confidence": 0.92, "reason": "Personaje estilo anime con katana" }]
+  },
+  "tags": ["samurai", "anime", "bordado rojo"],
   "created_at": "2026-09-30T18:40:00Z"
 }
 ```
