@@ -50,7 +50,6 @@ cp .env.example .env                               # llenar claves
 npm run scan                                       # genera data/catalog.json
 ```
 
-Los agentes 0 y 2–7 y el orquestador están especificados; su implementación es el siguiente paso.
 
 ## Probar el flujo (tiempo real)
 
