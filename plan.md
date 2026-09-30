@@ -22,11 +22,11 @@ Cada tarea termina con tests que prueban sus criterios de aceptación.
 
 **Fase 1: base**
 1. Contratos zod de todos los JSON de `specs/03`, incluido el mínimo 3 colores × 3 tomas. ✅
-2. Configuración (`.env`) validada con zod.
-3. Store de lotes: crear `run_id`, guardar y leer artefactos, transiciones de estado válidas.
+2. Configuración (`.env`) validada con zod. ✅
+3. Store de lotes: crear `run_id`, guardar y leer artefactos, transiciones de estado válidas. ✅
 
 **Fase 2: diseños**
-4. Biblioteca: escaneo de `DESIGNS_DIR`, hash, `designs.json`, detección de nuevos/renombrados/duplicados/faltantes.
+4. Biblioteca: escaneo de `DESIGNS_DIR`, hash, `designs.json`, detección de nuevos/renombrados/duplicados/faltantes. ✅
 5. Subida de diseños nuevos a Cloudinary `xdope-designs/`.
 6. Preparación del diseño: recorte, fondo transparente, máscara, paleta, `low_res`.
 6b. Curador: elección de diseño, título, descripción corta, `ProductBrief` desde `defaults.json`.
