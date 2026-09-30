@@ -12,44 +12,49 @@ Las fotos de `1. JUST PHOTOS of all designs` son **solo el insumo**: nunca se su
 
 | Comando | Qué hace | Código |
 |---|---|---|
-| `npm run pipeline` | Pipeline completo: Curador → Analista → Director de arte → Generador (Gemini) → QA → Copywriter → Publicador | `src/pipeline.cjs`, `src/agents/*.cjs`, `src/lib/*.cjs` |
-| `npm run scan` | Inventario de fotos de bordados para el pipeline (`data/catalog.json`) | `src/catalog/scan.cjs` |
-| `npm run schedule:install` | Crea las tareas programadas de Windows que corren el pipeline | `src/scheduler/install.cjs`, `scripts/run-pipeline.cmd` |
-| `npm run trial` | Prueba rápida de Curador → Director → Gemini → QA con `review.html` (también en GitHub Actions) | `src/cli/trial.ts` |
-| `npm run scan:library` | Biblioteca de diseños por hash de contenido (`designs.json`) | `src/designs/library.ts` |
+| `npm run gui` | Panel local (http://127.0.0.1:4646): estados de los lotes, revisar batches con un clic, crear, continuar y publicar | `src/cli/gui.ts` |
+| `npm run pipeline` | Pipeline completo: Curador → Director de arte → Gemini + QA → Copywriter → Publicador | `src/cli/pipeline.ts` |
+| `npm run scan:library` | Catálogo de diseños por hash (`designs.json`), el que usa `npm run pipeline` | `src/designs/library.ts` |
+| `npm run schedule:install` | Registra `schedule.json` en el Programador de tareas de Windows | `src/cli/schedule-install.ts` |
 | `npm run schedule:preview` | Muestra las próximas ejecuciones de `schedule.json` | `src/schedule.ts` |
+| `npm run trial` | Prueba rápida Curador → Director → Gemini → QA con `review.html` (también en GitHub Actions) | `src/cli/trial.ts` |
+| `npm run pipeline:cjs`, `npm run scan` | Pipeline anterior en JS (viene de `xdope-product-agents`, usa `data/catalog.json` y `output/`) | `src/pipeline.cjs`, `src/catalog/scan.cjs` |
 
-El pipeline (`.cjs`) viene de la carpeta `xdope-product-agents` y es lo que se usa hoy. Los módulos TypeScript tienen los contratos de las specs y la prueba; se irán uniendo en un solo pipeline.
+Requiere Node 22 o superior. En PowerShell, si `npm` da error de scripts deshabilitados, usa `npm.cmd`.
 
 ## Instalación (PC de Diego)
 
 ```bash
 npm install
-cp config/config.example.json config/config.json   # rutas, precios, colores
-cp .env.example .env                               # ANTHROPIC_API_KEY y GEMINI_API_KEY (XDOPE_* solo para publicar)
-npm run scan                                       # genera data/catalog.json
+cp .env.example .env              # ANTHROPIC_API_KEY, GEMINI_API_KEY, DESIGNS_DIR (XDOPE_* solo para publicar)
+npm run scan:library              # genera designs.json
+npm run gui                       # abre el panel
 ```
 
-**Agregar diseños nuevos:** copia la imagen en cualquier subcarpeta de `catalog.photoDirs` (sugerido `NUEVOS/`). En el siguiente `npm run scan` entra al catálogo; si el nombre no es numérico se le asigna el siguiente ID libre.
+**Agregar diseños nuevos:** copia la foto en `DESIGNS_DIR` (o una subcarpeta) y vuelve a correr `npm run scan:library`.
 
-## Correr el pipeline
+## Panel (`npm run gui`)
+
+- **Revisar batches:** consulta a Gemini el estado de cada batch pendiente y lo muestra (en cola, procesando, terminado…). Si alguno terminó, recoge los resultados en segundo plano: QA, reintentos, Copywriter.
+- **Recoger y continuar lotes:** lo mismo que `npm run pipeline -- --collect`.
+- **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo. Con "batch", las fotos después de la primera van a Gemini Batch (mitad de precio) y la acción termina enseguida; se recogen después.
+- Por lote: **Ver review**, **Continuar / Reintentar**, **Publicar (inactivo)** y **Abrir en admin**.
+
+Nada bloquea: cada acción corre `pipeline` como proceso aparte y el panel muestra su log. Solo corre una acción a la vez (también frente a las tareas programadas).
+
+## Correr el pipeline por consola
 
 ```bash
-npm run pipeline -- --design 207 --realtime   # prueba rápida: todo seguido, precio completo
-npm run pipeline -- --design 207              # modo batch (50 % menos), avanza un paso por ejecución
-npm run pipeline -- --designs 3               # el Curador elige 3 diseños pendientes
-npm run pipeline -- --collect-only            # recoge lotes terminados y envía el paso siguiente
-npm run pipeline -- --status                  # en qué paso va cada diseño y qué lotes siguen abiertos
-npm run pipeline -- --publish                 # crea como INACTIVOS los productos listos (usar la API de QA primero)
+npm run pipeline -- --designs 1 --batch              # nuevo lote; envía el batch y termina
+npm run pipeline -- --collect                        # recoge batches terminados y sigue los lotes en curso
+npm run pipeline -- --design d_3f9a1c                # un diseño del catálogo (o una ruta a una foto)
+npm run pipeline -- --resume <run_id> --publish      # crea el producto INACTIVO en XDOPE_API_URL
+npm run pipeline -- --status                         # en qué paso va cada lote
 ```
 
-**Modo batch** (`pipeline.mode`, por defecto): cada ejecución recoge los lotes terminados de Claude y Gemini, avanza cada diseño y envía el lote del paso siguiente. Un diseño pasa por unos 7 lotes. Los lotes suelen tardar menos de 1 h (máx. 24 h), así que con `--collect-only` programado cada 1–3 h un diseño queda listo en el día.
+Cada lote queda en `runs/<run_id>/` (`curator.json`, `shots.json`, `mockups/`, `qa.json`, `listing.json`, `brief.json`, `publish.json`, `review.html`). Si algo falla, `--resume` sigue desde el último paso guardado.
 
-Resultados en `output/<id>/` (`brief.json`, `analysis.json`, `prompts.json`, `state.json`, `mockups/`, `copy.json`, `publish.json`). Si algo falla, repetir el comando continúa desde el último paso guardado.
-
-Propiedad intelectual: con `ipPolicy: "flag"` (por defecto) el riesgo solo se registra; ningún diseño se descarta por eso.
-
-Para publicar se usa el usuario dedicado de los agentes (`XDOPE_AGENT_EMAIL` / `XDOPE_AGENT_PASSWORD`). Si tu `.env` todavía tiene `XDOPE_ADMIN_EMAIL` / `XDOPE_ADMIN_PASSWORD`, siguen funcionando.
+Para `--publish`: `XDOPE_API_URL`, `XDOPE_AGENT_EMAIL`, `XDOPE_AGENT_PASSWORD`, `XDOPE_ADMIN_URL` en `.env` y `config/defaults.json` (copia de `config/defaults.example.json`). Los colores deben existir en el atributo "Color" de la tienda; los agentes no crean colores ni categorías. Usa la API de QA primero.
 
 ## Prueba de los agentes (sin publicar)
 

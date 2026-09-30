@@ -11,15 +11,17 @@
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
     "test": "vitest run",
-    "pipeline": "node src/pipeline.cjs",
     "scan": "node src/catalog/scan.cjs",
     "scan:library": "tsx --env-file-if-exists=.env src/cli/scan.ts",
-    "schedule:install": "node src/scheduler/install.cjs",
-    "schedule:remove": "node src/scheduler/install.cjs --remove",
+    "schedule:remove": "tsx src/cli/schedule-install.ts --remove",
     "schedule:preview": "tsx src/cli/schedule-preview.ts",
     "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts",
     "pipeline": "tsx --env-file-if-exists=.env src/cli/pipeline.ts",
-    "schedule:install": "tsx src/cli/schedule-install.ts"
+    "schedule:install": "tsx src/cli/schedule-install.ts",
+    "gui": "tsx --env-file-if-exists=.env src/cli/gui.ts",
+    "pipeline:cjs": "node src/pipeline.cjs",
+    "schedule:install:cjs": "node src/scheduler/install.cjs",
+    "schedule:remove:cjs": "node src/scheduler/install.cjs --remove"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",

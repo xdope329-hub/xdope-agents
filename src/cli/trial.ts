@@ -69,7 +69,7 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
   await writeFile(path.join(dir, "shots.json"), JSON.stringify({ ...shotList, embroideryDescription }, null, 2));
   log(`  Colores: ${shotList.colors.map((c) => c.name).join(", ")} | ${shotList.shots.length} tomas`);
 
-  const { results, imageCost } = await generateMockups({
+  const outcome = await generateMockups({
     claude,
     gemini,
     runId: `${trialId}-${designId}`,
@@ -81,8 +81,11 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
     maxCostUsd: MAX_COST,
     outSize: [OUT_W, OUT_H],
     batch: BATCH,
+    waitForBatch: true,
     log,
   });
+  if (outcome.kind !== "done") throw new Error("El batch no terminó");
+  const { results, imageCost } = outcome;
 
   const passed = results.filter((r) => r.passed).length;
   log(`Fotos aprobadas: ${passed}/${results.length} | costo imágenes USD ${imageCost.toFixed(2)}`);

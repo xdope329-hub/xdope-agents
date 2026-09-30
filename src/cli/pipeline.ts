@@ -5,9 +5,12 @@
 //   npm run pipeline -- --designs 3                    el Curador toma los 3 diseños nuevos más antiguos del catálogo
 //   npm run pipeline -- --resume <run_id>[,…]          continúa (o reintenta) lotes existentes
 //   npm run pipeline -- --status                       muestra en qué paso va cada lote
+//   npm run pipeline -- --collect                      recoge los batch terminados y sigue los lotes en curso
 //   … --publish   crea el producto INACTIVO en XDOPE_API_URL (sin esto el lote se queda listo en "qa")
-//   … --batch     las fotos después de la primera van en batch de Gemini (mitad de precio, puede tardar horas)
-import { access, readFile, writeFile } from "node:fs/promises";
+//   … --batch     las fotos después de la primera van en batch de Gemini (mitad de precio). No espera: el lote queda
+//                 en "generating" y se recoge con --collect cuando el batch termina.
+import { unlinkSync } from "node:fs";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { z } from "zod";
@@ -62,7 +65,24 @@ if (PUBLISH && !defaults) throw new Error(`Falta ${DEFAULTS_FILE} para --publish
 const api = env.XDOPE_API_URL ? new XdopeApi(env.XDOPE_API_URL) : null;
 let loggedIn = false;
 
+// Una sola corrida a la vez (GUI, tareas programadas o consola), para no procesar dos veces el mismo lote.
+const lockFile = path.join(store.dir, ".pipeline.lock");
+if (await exists(lockFile)) {
+  const pid = Number(await readFile(lockFile, "utf8"));
+  if (isAlive(pid)) throw new Error(`Ya hay una corrida en curso (pid ${pid})`);
+}
+await mkdir(store.dir, { recursive: true });
+await writeFile(lockFile, String(process.pid));
+process.on("exit", () => {
+  try {
+    unlinkSync(lockFile);
+  } catch {}
+});
+
 const runIds = [...list(opt("resume"))];
+if (flag("collect")) {
+  for (const r of await store.list()) if (["design_ready", "shots_planned", "generating"].includes(r.status) && !runIds.includes(r.run_id)) runIds.push(r.run_id);
+}
 for (const ref of list(opt("design"))) runIds.push(await createRun(ref, "elegido por Diego (--design)"));
 if (opt("designs")) {
   const count = Number(opt("designs"));
@@ -72,7 +92,10 @@ if (opt("designs")) {
   if (picks.length === 0) console.log("No hay diseños nuevos elegibles en el catálogo (corre npm run scan)");
   for (const d of picks) runIds.push(await createRun(d.design_id, "diseño nuevo más antiguo del catálogo"));
 }
-if (runIds.length === 0) throw new Error("Nada que hacer: usa --design, --designs, --resume o --status");
+if (runIds.length === 0) {
+  console.log("Nada que hacer: usa --design, --designs, --resume, --collect o --status");
+  process.exit(0);
+}
 
 for (const runId of runIds) {
   const log = (msg: string) => console.log(`[${runId}] ${msg}`);
@@ -153,10 +176,12 @@ async function processRun(runId: string, log: (m: string) => void) {
   let qa = (await store.readArtifact(runId, "qa.json", QaFile)) as { results: ShotResult[]; image_cost_usd: number } | null;
   if (!qa) {
     if (state.status === "shots_planned") state = await store.transition(runId, "generating");
-    const { results, imageCost } = await generateMockups({
+    const outcome = await generateMockups({
       claude, gemini, runId, design, shotList, dir,
-      model: MODEL, escalationModel: ESCALATION, maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: BATCH, log,
+      model: MODEL, escalationModel: ESCALATION, maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: BATCH, waitForBatch: false, log,
     });
+    if (outcome.kind === "waiting") return log(`Batch pendiente (${outcome.state}); se recoge con --collect o con el botón de la GUI`);
+    const { results, imageCost } = outcome;
     await store.writeArtifact(runId, "mockups.json", MockupSet, toMockupSet(runId, results, imageCost));
     qa = { results, image_cost_usd: Number(imageCost.toFixed(3)) };
     await writeFile(store.file(runId, "qa.json"), JSON.stringify(qa, null, 2) + "\n");
@@ -299,6 +324,15 @@ function slug(s: string) {
 async function exists(p: string) {
   try {
     await access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isAlive(pid: number) {
+  try {
+    process.kill(pid, 0);
     return true;
   } catch {
     return false;

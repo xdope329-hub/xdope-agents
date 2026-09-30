@@ -49,34 +49,50 @@ export class GeminiImages {
   ): Promise<Map<string, GeneratedImage | Error>> {
     const model = requests[0]?.req.model;
     if (!model) return new Map();
-    if (requests.some((r) => r.req.model !== model)) throw new Error("Un batch solo admite un modelo");
-
-    const inlined: InlinedRequest[] = requests.map(({ key, req }) => ({ ...toRequest(req), metadata: { key } }));
-    const job = await this.ai.batches.create({ model, src: inlined, config: { displayName: opts.displayName } });
-    if (!job.name) throw new Error("Gemini no devolvió el nombre del trabajo batch");
-    opts.onCreated?.(job.name);
+    const jobName = await this.submitBatch(requests, opts.displayName);
+    opts.onCreated?.(jobName);
 
     const started = Date.now();
-    const done = new Set<string>([JobState.JOB_STATE_SUCCEEDED, JobState.JOB_STATE_FAILED, JobState.JOB_STATE_CANCELLED, JobState.JOB_STATE_EXPIRED]);
-    let current = job;
     let lastState = "";
-    while (!done.has(current.state ?? "")) {
+    for (;;) {
       await new Promise((r) => setTimeout(r, (opts.pollSeconds ?? 30) * 1000));
-      current = await this.ai.batches.get({ name: job.name });
-      if (current.state !== lastState) {
-        lastState = current.state ?? "";
+      const check = await this.checkBatch(jobName, requests.map((r) => r.key), model);
+      if (check.state !== lastState) {
+        lastState = check.state;
         opts.log?.(`  batch ${lastState} (${Math.round((Date.now() - started) / 60000)} min)`);
       }
+      if (check.results) return check.results;
+      if (check.done) throw new Error(`El batch terminó en ${check.state}: ${check.error ?? "sin detalle"}`);
     }
-    if (current.state !== JobState.JOB_STATE_SUCCEEDED) {
-      throw new Error(`El batch terminó en ${current.state}: ${current.error?.message ?? "sin detalle"}`);
-    }
+  }
+
+  // Envía el batch y devuelve el nombre del trabajo sin esperar. Todas las solicitudes deben usar el mismo modelo.
+  async submitBatch(requests: Array<{ key: string; req: ImageRequest }>, displayName: string): Promise<string> {
+    const model = requests[0]?.req.model;
+    if (!model) throw new Error("Batch vacío");
+    if (requests.some((r) => r.req.model !== model)) throw new Error("Un batch solo admite un modelo");
+    const inlined: InlinedRequest[] = requests.map(({ key, req }) => ({ ...toRequest(req), metadata: { key } }));
+    const job = await this.ai.batches.create({ model, src: inlined, config: { displayName } });
+    if (!job.name) throw new Error("Gemini no devolvió el nombre del trabajo batch");
+    return job.name;
+  }
+
+  // Consulta un batch una sola vez. Si terminó bien, trae la imagen o el error de cada clave.
+  async checkBatch(
+    jobName: string,
+    keys: string[],
+    model: string,
+  ): Promise<{ state: string; done: boolean; error?: string; results?: Map<string, GeneratedImage | Error> }> {
+    const current = await this.ai.batches.get({ name: jobName });
+    const state = current.state ?? "JOB_STATE_UNSPECIFIED";
+    const done = FINAL_STATES.has(state);
+    if (state !== JobState.JOB_STATE_SUCCEEDED) return { state, done, error: current.error?.message };
 
     const results = new Map<string, GeneratedImage | Error>();
     const responses = current.dest?.inlinedResponses ?? [];
     responses.forEach((r, i) => {
       // Las respuestas traen la metadata de la solicitud; si no, se asume el mismo orden.
-      const key = r.metadata?.key ?? requests[i]?.key;
+      const key = r.metadata?.key ?? keys[i];
       if (!key) return;
       if (r.error || !r.response) {
         results.set(key, new Error(r.error?.message ?? "Solicitud batch sin respuesta"));
@@ -88,10 +104,12 @@ export class GeminiImages {
         results.set(key, err instanceof Error ? err : new Error(String(err)));
       }
     });
-    for (const { key } of requests) if (!results.has(key)) results.set(key, new Error("Sin resultado en el batch"));
-    return results;
+    for (const key of keys) if (!results.has(key)) results.set(key, new Error("Sin resultado en el batch"));
+    return { state, done, results };
   }
 }
+
+const FINAL_STATES = new Set<string>([JobState.JOB_STATE_SUCCEEDED, JobState.JOB_STATE_FAILED, JobState.JOB_STATE_CANCELLED, JobState.JOB_STATE_EXPIRED]);
 
 function toRequest(req: ImageRequest) {
   const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [];

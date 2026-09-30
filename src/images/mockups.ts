@@ -1,6 +1,6 @@
 // Generación de las fotos de un producto (Gemini) con QA y reintento con el modelo de escalamiento.
 // La primera toma fija a la persona modelo; las demás la usan como referencia de identidad.
-import { mkdir, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { runQa, type QaResult } from "../agents/qa.js";
@@ -22,6 +22,8 @@ export interface MockupOptions {
   maxCostUsd: number;
   outSize: [number, number];
   batch: boolean;
+  // true: espera el batch aquí (trial). false: si sigue pendiente devuelve "waiting" y se recoge en otra corrida.
+  waitForBatch: boolean;
   log: (msg: string) => void;
 }
 
@@ -40,7 +42,10 @@ export interface ShotResult {
   passed: boolean;
 }
 
-export async function generateMockups(o: MockupOptions): Promise<{ results: ShotResult[]; imageCost: number }> {
+export type MockupOutcome = { kind: "done"; results: ShotResult[]; imageCost: number } | { kind: "waiting"; job: string; state: string };
+
+// Se puede llamar varias veces: retoma desde mockups/progress.json.
+export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> {
   await mkdir(path.join(o.dir, "mockups"), { recursive: true });
   let imageCost = 0;
 
@@ -98,40 +103,87 @@ export async function generateMockups(o: MockupOptions): Promise<{ results: Shot
     return result;
   };
 
-  o.log("Generando fotos…");
+  const progressFile = path.join(o.dir, "mockups", "progress.json");
+  const identityFile = path.join(o.dir, "mockups", "_identity.jpg");
   const [first, ...rest] = o.shotList.shots;
-  const firstResult = await generateShot(first, null);
-  const results: ShotResult[] = [firstResult];
-  // La referencia de identidad va reducida para no inflar las solicitudes (sobre todo en batch).
-  const identity: ImageInput | null = firstResult.image
-    ? { data: await sharp(firstResult.image).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer(), mediaType: "image/jpeg", label: "" }
-    : null;
-  let pregenerated = new Map<string, GeneratedImage | Error>();
-  if (o.batch && rest.length > 0) {
-    o.log(`Enviando ${rest.length} fotos en batch (mitad de precio; puede tardar)…`);
-    pregenerated = await o.gemini
-      .generateBatch(
-        rest.map((shot) => ({ key: shot.shot_id, req: request(shot, identity, o.model, "") })),
-        {
-          displayName: o.runId,
-          onCreated: (name) => {
-            o.log(`  trabajo batch: ${name}`);
-            void writeFile(path.join(o.dir, "batch-job.txt"), name + "\n");
-          },
-          log: o.log,
-        },
-      )
-      .catch((err) => {
-        o.log(`  El batch falló (${err instanceof Error ? err.message : String(err)}); sigo en modo normal`);
-        return new Map<string, GeneratedImage | Error>();
-      });
-    for (const r of pregenerated.values()) if (!(r instanceof Error)) imageCost += r.cost_usd;
+  let progress: Progress;
+  if (await exists(progressFile)) {
+    progress = JSON.parse(await readFile(progressFile, "utf8"));
+    imageCost = progress.image_cost_usd;
+  } else {
+    o.log("Generando fotos…");
+    const firstResult = await generateShot(first, null);
+    // La referencia de identidad va reducida para no inflar las solicitudes (sobre todo en batch).
+    if (firstResult.image) await writeFile(identityFile, await sharp(firstResult.image).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
+    delete firstResult.image;
+    progress = { first: firstResult, batch: null, image_cost_usd: imageCost };
+    await writeFile(progressFile, JSON.stringify(progress, null, 2));
   }
+  const identity: ImageInput | null = (await exists(identityFile)) ? { data: await readFile(identityFile), mediaType: "image/jpeg", label: "" } : null;
+  const save = async () => {
+    progress.image_cost_usd = imageCost;
+    await writeFile(progressFile, JSON.stringify(progress, null, 2));
+  };
+
+  let pregenerated = new Map<string, GeneratedImage | Error>();
+  if ((o.batch || progress.batch) && rest.length > 0) {
+    const requests = rest.map((shot) => ({ key: shot.shot_id, req: request(shot, identity, o.model, "") }));
+    try {
+      if (!progress.batch) {
+        o.log(`Enviando ${rest.length} fotos en batch (mitad de precio; puede tardar)…`);
+        const job = await o.gemini.submitBatch(requests, o.runId);
+        progress.batch = { job, model: o.model, keys: requests.map((r) => r.key), submitted_at: new Date().toISOString(), state: "JOB_STATE_PENDING", checked_at: null };
+        await save();
+        o.log(`  trabajo batch: ${job}`);
+      }
+      const b = progress.batch;
+      for (;;) {
+        const check = await o.gemini.checkBatch(b.job, b.keys, b.model);
+        b.state = check.state;
+        b.checked_at = new Date().toISOString();
+        await save();
+        if (check.results) {
+          pregenerated = check.results;
+          break;
+        }
+        if (check.done) throw new Error(`terminó en ${check.state}: ${check.error ?? "sin detalle"}`);
+        if (!o.waitForBatch) return { kind: "waiting", job: b.job, state: check.state };
+        o.log(`  batch ${check.state}; vuelvo a revisar en 60 s`);
+        await new Promise((r) => setTimeout(r, 60_000));
+      }
+      for (const r of pregenerated.values()) if (!(r instanceof Error)) imageCost += r.cost_usd;
+    } catch (err) {
+      o.log(`  El batch falló (${err instanceof Error ? err.message : String(err)}); sigo en modo normal`);
+    }
+  }
+
+  const results: ShotResult[] = [progress.first];
   for (let i = 0; i < rest.length; i += CONCURRENCY) {
     results.push(...(await Promise.all(rest.slice(i, i + CONCURRENCY).map((s) => generateShot(s, identity, pregenerated.get(s.shot_id))))));
   }
   for (const r of results) delete (r as { image?: Buffer }).image;
-  return { results, imageCost };
+  return { kind: "done", results, imageCost };
+}
+
+// Progreso guardado en mockups/progress.json: la primera toma ya hecha y el batch pendiente, si hay.
+export interface Progress {
+  first: ShotResult;
+  batch: { job: string; model: string; keys: string[]; submitted_at: string; state: string; checked_at: string | null } | null;
+  image_cost_usd: number;
+}
+
+export async function readProgress(dir: string): Promise<Progress | null> {
+  const file = path.join(dir, "mockups", "progress.json");
+  return (await exists(file)) ? JSON.parse(await readFile(file, "utf8")) : null;
+}
+
+async function exists(p: string) {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // MockupSet (specs/03) con las tomas que produjeron al menos una imagen.
