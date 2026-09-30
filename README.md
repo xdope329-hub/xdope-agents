@@ -37,7 +37,7 @@ npm run gui                       # abre el panel
 
 - **Revisar batches:** consulta a Gemini el estado de cada batch pendiente y lo muestra (en cola, procesando, terminado…). Si alguno terminó, recoge los resultados en segundo plano: QA, reintentos, Copywriter.
 - **Recoger y continuar lotes:** lo mismo que `npm run pipeline -- --collect`.
-- **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo. Con "batch", las fotos después de la primera van a Gemini Batch (mitad de precio) y la acción termina enseguida; se recogen después.
+- **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo, con la calidad elegida (baja 1K, media 2K, alta 2K + reintento con Pro). Con "batch" (por defecto) todas las fotos van a Gemini Batch a mitad de precio en tres pasos (primera foto → las otras dos → reintentos); la acción termina enseguida y cada paso se recoge con "Revisar batches".
 - Por lote: **Ver review**, **Continuar / Reintentar**, **Publicar (inactivo)** y **Abrir en admin**.
 
 Nada bloquea: cada acción corre `pipeline` como proceso aparte y el panel muestra su log. Solo corre una acción a la vez (también frente a las tareas programadas).
@@ -45,7 +45,7 @@ Nada bloquea: cada acción corre `pipeline` como proceso aparte y el panel muest
 ## Correr el pipeline por consola
 
 ```bash
-npm run pipeline -- --designs 1 --batch              # nuevo lote; envía el batch y termina
+npm run pipeline -- --designs 1 --quality baja       # nuevo lote; envía el batch y termina (--realtime para no usar batch)
 npm run pipeline -- --collect                        # recoge batches terminados y sigue los lotes en curso
 npm run pipeline -- --design d_3f9a1c                # un diseño del catálogo (o una ruta a una foto)
 npm run pipeline -- --resume <run_id> --publish      # crea el producto INACTIVO en XDOPE_API_URL

@@ -1,14 +1,17 @@
-// Generación de las fotos de un producto (Gemini) con QA y reintento con el modelo de escalamiento.
-// La primera toma fija a la persona modelo; las demás la usan como referencia de identidad.
+// Generación de las fotos de un producto (Gemini) con QA y un reintento por foto.
+// Etapas: primera foto (fija a la persona modelo) → resto de fotos con esa identidad → reintentos de las que no pasan QA.
+// Con batch, cada etapa es un trabajo batch de Gemini (mitad de precio) y la función devuelve "waiting" hasta que termine;
+// el progreso queda en mockups/progress.json, así que se puede volver a llamar en otra corrida.
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { runQa, type QaResult } from "../agents/qa.js";
 import type { MockupSet, Shot, ShotList } from "../contracts/index.js";
 import type { Claude, ImageInput } from "../llm/claude.js";
-import type { GeminiImages, GeneratedImage, ImageRequest } from "./gemini.js";
+import { imagePrice, type GeminiImages, type GeneratedImage, type ImageRequest, type ImageSize } from "./gemini.js";
 
 const CONCURRENCY = 3;
+const MAX_ATTEMPTS = 2;
 
 export interface MockupOptions {
   claude: Claude;
@@ -18,7 +21,8 @@ export interface MockupOptions {
   shotList: ShotList;
   dir: string; // las fotos quedan en <dir>/mockups/
   model: string;
-  escalationModel: string;
+  retryModel: string;
+  imageSize: ImageSize;
   maxCostUsd: number;
   outSize: [number, number];
   batch: boolean;
@@ -42,139 +46,167 @@ export interface ShotResult {
   passed: boolean;
 }
 
-export type MockupOutcome = { kind: "done"; results: ShotResult[]; imageCost: number } | { kind: "waiting"; job: string; state: string };
-
-// Se puede llamar varias veces: retoma desde mockups/progress.json.
-export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> {
-  await mkdir(path.join(o.dir, "mockups"), { recursive: true });
-  let imageCost = 0;
-
-  const request = (shot: Shot, identity: ImageInput | null, model: string, fix: string): ImageRequest => ({
-    model,
-    prompt: `${shot.prompt}\n\nAvoid: ${shot.negative_prompt}${fix}`,
-    refs: [
-      { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: o.design.data, mimeType: "image/jpeg" },
-      ...(identity ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: identity.data, mimeType: identity.mediaType }] : []),
-    ],
-    aspectRatio: "4:5",
-    imageSize: "2K",
-  });
-
-  // `pregenerated` es el resultado del primer intento cuando ya salió en un batch.
-  const generateShot = async (shot: Shot, identity: ImageInput | null, pregenerated?: GeneratedImage | Error): Promise<ShotResult & { image?: Buffer }> => {
-    const result: ShotResult & { image?: Buffer } = { shot, file: null, attempts: [], passed: false };
-    let best: { data: Buffer; qa: QaResult; score: number } | null = null;
-    let fix = "";
-    for (const [attempt, model] of [o.model, o.escalationModel].entries()) {
-      const fromBatch = attempt === 0 ? pregenerated : undefined;
-      if (!fromBatch && imageCost >= o.maxCostUsd) {
-        result.attempts.push({ model, candidate: null, cost_usd: 0, qa: null, error: `Tope de costo USD ${o.maxCostUsd} alcanzado` });
-        break;
-      }
-      try {
-        if (fromBatch instanceof Error) throw fromBatch;
-        const img = fromBatch ?? (await o.gemini.generate(request(shot, identity, model, fix)));
-        if (!fromBatch) imageCost += img.cost_usd;
-        const data = await sharp(img.data).jpeg({ quality: 90 }).toBuffer();
-        const candidate = `mockups/${shot.shot_id}/candidate_${attempt + 1}.jpg`;
-        await mkdir(path.join(o.dir, "mockups", shot.shot_id), { recursive: true });
-        await writeFile(path.join(o.dir, candidate), data);
-        const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity, shot, garmentColor: shot.color, size: o.shotList.analysis.embroidery_size_cm });
-        result.attempts.push({ model: img.batch ? `${model} (batch)` : model, candidate, cost_usd: img.cost_usd, qa });
-        const score = qa.embroidery_fidelity + qa.realism;
-        if (!best || score > best.score) best = { data, qa, score };
-        if (qa.passed) break;
-        fix = `\n\nFix these problems found in the previous attempt: ${qa.reasons.join("; ")}`;
-      } catch (err) {
-        result.attempts.push({ model, candidate: null, cost_usd: 0, qa: null, error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-    if (best) {
-      const file = `mockups/${shot.shot_id}.jpg`;
-      const [w, h] = o.outSize;
-      const final = await sharp(best.data).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
-      await writeFile(path.join(o.dir, file), final);
-      result.file = file;
-      result.passed = best.qa.passed;
-      result.image = best.data;
-    }
-    const last = result.attempts.at(-1);
-    o.log(`  ${shot.shot_id}: ${result.passed ? "OK" : "NO PASA"}${last?.qa ? ` (bordado ${last.qa.embroidery_fidelity}/10, realismo ${last.qa.realism}/10)` : last?.error ? ` (${last.error})` : ""}`);
-    return result;
-  };
-
-  const progressFile = path.join(o.dir, "mockups", "progress.json");
-  const identityFile = path.join(o.dir, "mockups", "_identity.jpg");
-  const [first, ...rest] = o.shotList.shots;
-  let progress: Progress;
-  if (await exists(progressFile)) {
-    progress = JSON.parse(await readFile(progressFile, "utf8"));
-    imageCost = progress.image_cost_usd;
-  } else {
-    o.log("Generando fotos…");
-    const firstResult = await generateShot(first, null);
-    // La referencia de identidad va reducida para no inflar las solicitudes (sobre todo en batch).
-    if (firstResult.image) await writeFile(identityFile, await sharp(firstResult.image).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
-    delete firstResult.image;
-    progress = { first: firstResult, batch: null, image_cost_usd: imageCost };
-    await writeFile(progressFile, JSON.stringify(progress, null, 2));
-  }
-  const identity: ImageInput | null = (await exists(identityFile)) ? { data: await readFile(identityFile), mediaType: "image/jpeg", label: "" } : null;
-  const save = async () => {
-    progress.image_cost_usd = imageCost;
-    await writeFile(progressFile, JSON.stringify(progress, null, 2));
-  };
-
-  let pregenerated = new Map<string, GeneratedImage | Error>();
-  if ((o.batch || progress.batch) && rest.length > 0) {
-    const requests = rest.map((shot) => ({ key: shot.shot_id, req: request(shot, identity, o.model, "") }));
-    try {
-      if (!progress.batch) {
-        o.log(`Enviando ${rest.length} fotos en batch (mitad de precio; puede tardar)…`);
-        const job = await o.gemini.submitBatch(requests, o.runId);
-        progress.batch = { job, model: o.model, keys: requests.map((r) => r.key), submitted_at: new Date().toISOString(), state: "JOB_STATE_PENDING", checked_at: null };
-        await save();
-        o.log(`  trabajo batch: ${job}`);
-      }
-      const b = progress.batch;
-      for (;;) {
-        const check = await o.gemini.checkBatch(b.job, b.keys, b.model);
-        b.state = check.state;
-        b.checked_at = new Date().toISOString();
-        await save();
-        if (check.results) {
-          pregenerated = check.results;
-          break;
-        }
-        if (check.done) throw new Error(`terminó en ${check.state}: ${check.error ?? "sin detalle"}`);
-        if (!o.waitForBatch) return { kind: "waiting", job: b.job, state: check.state };
-        o.log(`  batch ${check.state}; vuelvo a revisar en 60 s`);
-        await new Promise((r) => setTimeout(r, 60_000));
-      }
-      for (const r of pregenerated.values()) if (!(r instanceof Error)) imageCost += r.cost_usd;
-    } catch (err) {
-      o.log(`  El batch falló (${err instanceof Error ? err.message : String(err)}); sigo en modo normal`);
-    }
-  }
-
-  const results: ShotResult[] = [progress.first];
-  for (let i = 0; i < rest.length; i += CONCURRENCY) {
-    results.push(...(await Promise.all(rest.slice(i, i + CONCURRENCY).map((s) => generateShot(s, identity, pregenerated.get(s.shot_id))))));
-  }
-  for (const r of results) delete (r as { image?: Buffer }).image;
-  return { kind: "done", results, imageCost };
+export interface PendingBatch {
+  job: string;
+  model: string;
+  keys: string[];
+  stage: string;
+  submitted_at: string;
+  state: string;
+  checked_at: string | null;
 }
 
-// Progreso guardado en mockups/progress.json: la primera toma ya hecha y el batch pendiente, si hay.
+// Progreso guardado en mockups/progress.json.
 export interface Progress {
-  first: ShotResult;
-  batch: { job: string; model: string; keys: string[]; submitted_at: string; state: string; checked_at: string | null } | null;
+  attempts: Record<string, Attempt[]>; // por shot_id
+  batch: PendingBatch | null;
   image_cost_usd: number;
+}
+
+export type MockupOutcome = { kind: "done"; results: ShotResult[]; imageCost: number } | { kind: "waiting"; job: string; state: string };
+
+export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> {
+  await mkdir(path.join(o.dir, "mockups"), { recursive: true });
+  const progressFile = path.join(o.dir, "mockups", "progress.json");
+  const identityFile = path.join(o.dir, "mockups", "_identity.jpg");
+  const progress: Progress = (await readProgress(o.dir)) ?? { attempts: {}, batch: null, image_cost_usd: 0 };
+  const save = () => writeFile(progressFile, JSON.stringify(progress, null, 2));
+  const [first, ...rest] = o.shotList.shots;
+  const attemptsOf = (s: Shot) => (progress.attempts[s.shot_id] ??= []);
+  const passed = (s: Shot) => attemptsOf(s).some((a) => a.qa?.passed);
+  const identity = async (): Promise<ImageInput | null> => ((await exists(identityFile)) ? { data: await readFile(identityFile), mediaType: "image/jpeg", label: "" } : null);
+
+  const request = async (shot: Shot, model: string): Promise<ImageRequest> => {
+    const last = attemptsOf(shot).at(-1);
+    const fix = last?.qa?.reasons.length ? `\n\nFix these problems found in the previous attempt: ${last.qa.reasons.join("; ")}` : "";
+    const id = shot === first ? null : await identity();
+    return {
+      model,
+      prompt: `${shot.prompt}\n\nAvoid: ${shot.negative_prompt}${fix}`,
+      refs: [
+        { role: "Reference 1: the exact embroidery design. Reproduce it as raised thread embroidery, identical shapes and thread colors.", data: o.design.data, mimeType: "image/jpeg" },
+        ...(id ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: id.data, mimeType: id.mediaType }] : []),
+      ],
+      aspectRatio: "4:5",
+      imageSize: o.imageSize,
+    };
+  };
+
+  // Guarda la candidata, pasa QA y registra el intento.
+  const review = async (shot: Shot, model: string, img: GeneratedImage | Error) => {
+    const n = attemptsOf(shot).length + 1;
+    if (img instanceof Error) {
+      attemptsOf(shot).push({ model, candidate: null, cost_usd: 0, qa: null, error: img.message });
+      o.log(`  ${shot.shot_id}: sin imagen (${img.message})`);
+      return;
+    }
+    progress.image_cost_usd += img.cost_usd;
+    const data = await sharp(img.data).jpeg({ quality: 90 }).toBuffer();
+    const candidate = `mockups/${shot.shot_id}/candidate_${n}.jpg`;
+    await mkdir(path.join(o.dir, "mockups", shot.shot_id), { recursive: true });
+    await writeFile(path.join(o.dir, candidate), data);
+    const id = shot === first ? null : await identity();
+    try {
+      const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity: id, shot, garmentColor: shot.color, size: o.shotList.analysis.embroidery_size_cm });
+      attemptsOf(shot).push({ model: img.batch ? `${model} (batch)` : model, candidate, cost_usd: img.cost_usd, qa });
+      o.log(`  ${shot.shot_id}: ${qa.passed ? "OK" : "NO PASA"} (bordado ${qa.embroidery_fidelity}/10, realismo ${qa.realism}/10)`);
+    } catch (err) {
+      attemptsOf(shot).push({ model, candidate, cost_usd: img.cost_usd, qa: null, error: `QA falló: ${err instanceof Error ? err.message : String(err)}` });
+    }
+    // La mejor foto de la primera toma es la referencia de identidad para las demás.
+    if (shot === first) {
+      const best = bestAttempt(attemptsOf(first));
+      if (best?.candidate) await writeFile(identityFile, await sharp(path.join(o.dir, best.candidate)).resize(1024, 1024, { fit: "inside" }).jpeg({ quality: 85 }).toBuffer());
+    }
+  };
+
+  // Siguiente etapa pendiente, o null si ya no queda nada por generar.
+  const nextStage = (): { stage: string; shots: Shot[]; model: string } | null => {
+    if (attemptsOf(first).length === 0) return { stage: "primera foto", shots: [first], model: o.model };
+    const pending = rest.filter((s) => attemptsOf(s).length === 0);
+    if (pending.length) return { stage: "fotos restantes", shots: pending, model: o.model };
+    const retry = o.shotList.shots.filter((s) => !passed(s) && attemptsOf(s).length < MAX_ATTEMPTS);
+    if (!retry.length) return null;
+    const cost = retry.length * imagePrice(o.retryModel, o.imageSize, o.batch);
+    if (progress.image_cost_usd + cost > o.maxCostUsd) {
+      o.log(`  Sin reintentos: superarían el tope de USD ${o.maxCostUsd} (van USD ${progress.image_cost_usd.toFixed(2)})`);
+      return null;
+    }
+    return { stage: "reintentos", shots: retry, model: o.retryModel };
+  };
+
+  for (;;) {
+    if (progress.batch) {
+      const b = progress.batch;
+      const check = await o.gemini.checkBatch(b.job, b.keys, b.model, o.imageSize);
+      b.state = check.state;
+      b.checked_at = new Date().toISOString();
+      await save();
+      if (!check.done) {
+        if (!o.waitForBatch) return { kind: "waiting", job: b.job, state: check.state };
+        o.log(`  batch (${b.stage}) ${check.state}; vuelvo a revisar en 60 s`);
+        await new Promise((r) => setTimeout(r, 60_000));
+        continue;
+      }
+      o.log(`Batch de ${b.stage} ${check.results ? "terminado" : `terminó en ${check.state}`}; revisando fotos…`);
+      for (const key of b.keys) {
+        const shot = o.shotList.shots.find((s) => s.shot_id === key);
+        if (shot) await review(shot, b.model, check.results?.get(key) ?? new Error(`Batch ${check.state}: ${check.error ?? "sin detalle"}`));
+      }
+      progress.batch = null;
+      await save();
+      continue;
+    }
+
+    const next = nextStage();
+    if (!next) break;
+    if (o.batch) {
+      o.log(`Enviando batch de ${next.stage} (${next.shots.length} foto${next.shots.length > 1 ? "s" : ""})…`);
+      const requests = await Promise.all(next.shots.map(async (s) => ({ key: s.shot_id, req: await request(s, next.model) })));
+      const job = await o.gemini.submitBatch(requests, `${o.runId}-${next.stage.replace(/\s+/g, "-")}`);
+      progress.batch = { job, model: next.model, keys: requests.map((r) => r.key), stage: next.stage, submitted_at: new Date().toISOString(), state: "JOB_STATE_PENDING", checked_at: null };
+      await save();
+      o.log(`  trabajo batch: ${job}`);
+      continue;
+    }
+    o.log(`Generando ${next.stage}…`);
+    for (let i = 0; i < next.shots.length; i += CONCURRENCY) {
+      await Promise.all(
+        next.shots.slice(i, i + CONCURRENCY).map(async (s) => {
+          const img = await o.gemini.generate(await request(s, next.model)).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))));
+          await review(s, next.model, img);
+        }),
+      );
+    }
+    await save();
+  }
+
+  // Foto final por toma: el mejor intento, recortado a outSize.
+  const results: ShotResult[] = [];
+  for (const shot of o.shotList.shots) {
+    const attempts = attemptsOf(shot);
+    const best = bestAttempt(attempts);
+    let file: string | null = null;
+    if (best?.candidate) {
+      file = `mockups/${shot.shot_id}.jpg`;
+      const [w, h] = o.outSize;
+      await writeFile(path.join(o.dir, file), await sharp(path.join(o.dir, best.candidate)).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer());
+    }
+    results.push({ shot, file, attempts, passed: !!best?.qa?.passed });
+  }
+  return { kind: "done", results, imageCost: progress.image_cost_usd };
+}
+
+function bestAttempt(attempts: Attempt[]): Attempt | null {
+  const score = (a: Attempt) => (a.qa ? (a.qa.passed ? 100 : 0) + a.qa.embroidery_fidelity + a.qa.realism : -1);
+  return attempts.filter((a) => a.candidate).sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 
 export async function readProgress(dir: string): Promise<Progress | null> {
   const file = path.join(dir, "mockups", "progress.json");
-  return (await exists(file)) ? JSON.parse(await readFile(file, "utf8")) : null;
+  if (!(await exists(file))) return null;
+  const p = JSON.parse(await readFile(file, "utf8"));
+  return p.attempts ? p : null; // formato anterior: se ignora
 }
 
 async function exists(p: string) {

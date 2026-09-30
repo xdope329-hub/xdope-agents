@@ -7,8 +7,9 @@
 //   npm run pipeline -- --status                       muestra en qué paso va cada lote
 //   npm run pipeline -- --collect                      recoge los batch terminados y sigue los lotes en curso
 //   … --publish   crea el producto INACTIVO en XDOPE_API_URL (sin esto el lote se queda listo en "qa")
-//   … --batch     las fotos después de la primera van en batch de Gemini (mitad de precio). No espera: el lote queda
-//                 en "generating" y se recoge con --collect cuando el batch termina.
+//   … --quality baja|media|alta   calidad de las fotos del lote nuevo (por defecto IMAGE_QUALITY o media)
+//   … --realtime  genera las fotos al momento (precio completo). Por defecto todo va en batch de Gemini (mitad de
+//                 precio): el lote queda en "generating" y se recoge con --collect cuando cada batch termina.
 import { unlinkSync } from "node:fs";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -24,6 +25,7 @@ import { GeminiImages } from "../images/gemini.js";
 import { approvedColors, generateMockups, toMockupSet, type ShotResult } from "../images/mockups.js";
 import { Claude, type ImageInput } from "../llm/claude.js";
 import { renderReview } from "../review.js";
+import { QUALITY, parseQuality } from "../quality.js";
 import { RunStore } from "../runs/store.js";
 import { XdopeApi } from "../store/xdope.js";
 
@@ -36,11 +38,10 @@ const opt = (name: string) => {
 };
 const list = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
-const MODEL = env.IMAGE_MODEL ?? "gemini-3.1-flash-image";
-const ESCALATION = env.IMAGE_ESCALATION_MODEL ?? "gemini-3-pro-image";
 const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
-const BATCH = flag("batch") || env.IMAGE_USE_BATCH === "true";
+const BATCH = !flag("realtime") && env.IMAGE_USE_BATCH !== "false";
+const QUALITY_ARG = parseQuality(opt("quality") ?? env.IMAGE_QUALITY);
 const PUBLISH = flag("publish");
 const CATALOG = env.DESIGNS_CATALOG ?? "designs.json";
 const DEFAULTS_FILE = env.DEFAULTS_FILE ?? "config/defaults.json";
@@ -135,7 +136,7 @@ async function createRun(ref: string, reason: string): Promise<string> {
   await store.create(runId, designId);
   const jpg = await sharp(await readFile(photo)).rotate().resize(1536, 1536, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
   await writeFile(store.file(runId, "design.jpg"), jpg);
-  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason }, null, 2) + "\n");
+  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH }, null, 2) + "\n");
   console.log(`[${runId}] lote creado para ${designId}`);
   return runId;
 }
@@ -178,7 +179,7 @@ async function processRun(runId: string, log: (m: string) => void) {
     if (state.status === "shots_planned") state = await store.transition(runId, "generating");
     const outcome = await generateMockups({
       claude, gemini, runId, design, shotList, dir,
-      model: MODEL, escalationModel: ESCALATION, maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: BATCH, waitForBatch: false, log,
+      ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false, log,
     });
     if (outcome.kind === "waiting") return log(`Batch pendiente (${outcome.state}); se recoge con --collect o con el botón de la GUI`);
     const { results, imageCost } = outcome;

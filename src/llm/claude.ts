@@ -2,9 +2,14 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 
-export const CLAUDE_MODEL = "claude-opus-5-5";
+// Modelo de los agentes (Curador, Director, QA, Copywriter). Sonnet 5.5 por costo; CLAUDE_MODEL lo cambia.
+export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-5-5";
 // USD por millón de tokens (entrada, salida) para estimar costo.
-const PRICE = { input: 4, output: 20 };
+const PRICES: Record<string, { input: number; output: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20 },
+  "claude-sonnet-5-5": { input: 2, output: 10 },
+  "claude-haiku-4-5": { input: 1, output: 5 },
+};
 
 export interface Usage {
   input_tokens: number;
@@ -21,7 +26,10 @@ export interface ImageInput {
 export class Claude {
   readonly usage: Usage = { input_tokens: 0, output_tokens: 0, cost_usd: 0 };
 
-  constructor(private readonly client = new Anthropic()) {}
+  constructor(
+    private readonly client = new Anthropic(),
+    readonly model = CLAUDE_MODEL,
+  ) {}
 
   // Una llamada con imágenes y salida JSON validada por el esquema.
   // Reintenta una vez si la respuesta no pasa la validación del esquema; los errores
@@ -50,16 +58,18 @@ export class Claude {
     content.push({ type: "text", text: opts.prompt });
 
     const response = await this.client.messages.parse({
-      model: CLAUDE_MODEL,
+      model: this.model,
       max_tokens: 16000,
       system: opts.system,
-      output_config: { effort: opts.effort ?? "medium", format: zodOutputFormat(opts.schema) },
+      // Haiku 4.5 no acepta effort.
+      output_config: this.model.startsWith("claude-haiku") ? { format: zodOutputFormat(opts.schema) } : { effort: opts.effort ?? "medium", format: zodOutputFormat(opts.schema) },
       messages: [{ role: "user", content }],
     });
 
     this.usage.input_tokens += response.usage.input_tokens;
     this.usage.output_tokens += response.usage.output_tokens;
-    this.usage.cost_usd += (response.usage.input_tokens * PRICE.input + response.usage.output_tokens * PRICE.output) / 1e6;
+    const price = PRICES[this.model] ?? PRICES["claude-opus-5-5"];
+    this.usage.cost_usd += (response.usage.input_tokens * price.input + response.usage.output_tokens * price.output) / 1e6;
 
     if (response.stop_reason === "refusal") {
       throw new Error(`Claude rechazó la solicitud: ${response.stop_details?.explanation ?? "sin detalle"}`);

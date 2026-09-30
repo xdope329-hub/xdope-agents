@@ -11,16 +11,16 @@ import { runDirector, type GarmentColor } from "../agents/director.js";
 import { GeminiImages } from "../images/gemini.js";
 import { generateMockups } from "../images/mockups.js";
 import { Claude, type ImageInput } from "../llm/claude.js";
+import { QUALITY, parseQuality } from "../quality.js";
 import { renderReview } from "../review.js";
 
 const env = process.env;
-const MODEL = env.IMAGE_MODEL ?? "gemini-3.1-flash-image";
-const ESCALATION = env.IMAGE_ESCALATION_MODEL ?? "gemini-3-pro-image";
 const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
 
 const args = process.argv.slice(2);
 const BATCH = args.includes("--batch") || env.IMAGE_USE_BATCH === "true";
+const QUALITY_NAME = parseQuality(env.IMAGE_QUALITY);
 const sources = args.filter((a) => a !== "--batch").flatMap((a) => a.split(/[\s,]+/)).filter(Boolean);
 if (sources.length === 0) throw new Error("Pasa al menos una ruta o URL de imagen de bordado");
 if (!env.GEMINI_API_KEY) throw new Error("Falta GEMINI_API_KEY");
@@ -76,8 +76,7 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
     design,
     shotList,
     dir,
-    model: MODEL,
-    escalationModel: ESCALATION,
+    ...QUALITY[QUALITY_NAME],
     maxCostUsd: MAX_COST,
     outSize: [OUT_W, OUT_H],
     batch: BATCH,

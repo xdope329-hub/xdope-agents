@@ -7,6 +7,7 @@ import { createServer, type ServerResponse } from "node:http";
 import path from "node:path";
 import { GeminiImages } from "../images/gemini.js";
 import { readProgress } from "../images/mockups.js";
+import { parseQuality } from "../quality.js";
 import { RunStore } from "../runs/store.js";
 
 const env = process.env;
@@ -69,6 +70,7 @@ async function runsSummary() {
     const qa = await readJson(path.join(dir, "qa.json"));
     const publish = await readJson(path.join(dir, "publish.json"));
     const progress = await readProgress(dir);
+    const source = await readJson(path.join(dir, "source.json"));
     out.push({
       run_id: r.run_id,
       design_id: r.design_id,
@@ -76,6 +78,7 @@ async function runsSummary() {
       error: r.error,
       updated_at: r.history.at(-1)?.at ?? null,
       title: curator?.title ?? null,
+      quality: source?.quality ?? "media",
       batch: qa ? null : (progress?.batch ?? null),
       approved: qa ? `${qa.results.filter((x: { passed: boolean }) => x.passed).length}/${qa.results.length}` : null,
       image_cost_usd: qa?.image_cost_usd ?? progress?.image_cost_usd ?? null,
@@ -140,7 +143,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean }): string[] {
+function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string }): string[] {
   const runId = (id?: string) => {
     if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) throw new Error("run_id inválido");
     return id;
@@ -149,7 +152,7 @@ function actionArgs(body: { action?: string; run_id?: string; count?: number; ba
     case "new": {
       const n = Math.floor(Number(body.count ?? 1));
       if (!(n >= 1 && n <= 20)) throw new Error("Cantidad entre 1 y 20");
-      return ["--designs", String(n), ...(body.batch ? ["--batch"] : [])];
+      return ["--designs", String(n), "--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : [])];
     }
     case "collect":
       return ["--collect"];
@@ -188,6 +191,7 @@ main{max-width:1200px;margin:0 auto;padding:16px}h1{font-size:20px;margin:4px 0 
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
 button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button:disabled{opacity:.5;cursor:default}
+select{font:inherit;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 input[type=number]{width:56px;font:inherit;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:16px;overflow-x:auto}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500}
@@ -203,6 +207,7 @@ pre{white-space:pre-wrap;margin:0;max-height:320px;overflow:auto;font-size:12px}
   <button id="collect">Recoger y continuar lotes</button>
   <span class="muted">|</span>
   <label>Nuevo lote: <input type="number" id="count" min="1" max="20" value="1"></label>
+  <label>Calidad: <select id="quality"><option value="baja">baja</option><option value="media" selected>media</option><option value="alta">alta</option></select></label>
   <label><input type="checkbox" id="batch" checked> batch (mitad de precio)</label>
   <button id="new">Crear</button>
   <span class="muted">|</span>
@@ -232,14 +237,14 @@ async function load() {
   const { runs, job } = await api("/api/runs");
   showJob(job);
   $("runs").innerHTML = runs.length ? runs.map((r) => {
-    const b = r.batch ? esc(STATE[r.batch.state] || r.batch.state) + '<div class="muted">enviado hace ' + ago(r.batch.submitted_at) + (r.batch.checked_at ? ", revisado hace " + ago(r.batch.checked_at) : "") + "</div>" : '<span class="muted">—</span>';
+    const b = r.batch ? esc(r.batch.stage || "") + ": " + esc(STATE[r.batch.state] || r.batch.state) + '<div class="muted">enviado hace ' + ago(r.batch.submitted_at) + (r.batch.checked_at ? ", revisado hace " + ago(r.batch.checked_at) : "") + "</div>" : '<span class="muted">—</span>';
     const acts = [];
     if (r.has_review) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/review.html" target="_blank"><button>Ver review</button></a>');
     if (!["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="resume" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar" : "Continuar") + "</button>");
     if (r.has_listing && ["qa", "publishing"].includes(r.status)) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">Publicar (inactivo)</button>');
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
-      "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
+      "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
       '<td><span class="badge s-' + esc(r.status) + '">' + esc(r.status) + "</span></td><td>" + b + "</td><td>" + esc(r.approved ?? "—") + "</td><td>" + (r.image_cost_usd != null ? "USD " + Number(r.image_cost_usd).toFixed(2) : "—") + '</td><td><div class="actions">' + acts.join("") + "</div></td></tr>";
   }).join("") : '<tr><td colspan=7 class="muted">Aún no hay lotes. Crea uno con el botón de arriba.</td></tr>';
 }
@@ -273,7 +278,7 @@ $("check").onclick = async () => {
   $("check").disabled = false;
 };
 $("collect").onclick = () => act({ action: "collect" });
-$("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked });
+$("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value });
 $("refresh").onclick = () => load().catch((e) => msg(e.message, true));
 $("runs").onclick = (e) => { const b = e.target.closest("[data-act]"); if (!b) return;
   if (b.dataset.act === "publish" && !confirm("¿Crear el producto INACTIVO en la tienda para " + b.dataset.run + "?")) return;

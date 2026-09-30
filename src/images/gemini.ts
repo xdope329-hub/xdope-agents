@@ -1,11 +1,17 @@
 import { GoogleGenAI, JobState, type GenerateContentResponse, type InlinedRequest } from "@google/genai";
 
-// USD por imagen a 2K, precios públicos al 2026-09-30 (specs/04). El modo batch cuesta la mitad.
-const PRICE_2K: Record<string, number> = {
-  "gemini-3.1-flash-image": 0.101,
-  "gemini-3-pro-image": 0.134,
+// USD por imagen según resolución (specs/04; 1K de Flash es estimado, confirmar en la factura). El modo batch cuesta la mitad.
+export type ImageSize = "1K" | "2K" | "4K";
+const PRICE: Record<string, Partial<Record<ImageSize, number>>> = {
+  "gemini-3.1-flash-image": { "1K": 0.067, "2K": 0.101, "4K": 0.151 },
+  "gemini-3-pro-image": { "1K": 0.134, "2K": 0.134, "4K": 0.24 },
 };
 const BATCH_DISCOUNT = 0.5;
+
+export function imagePrice(model: string, size: ImageSize, batch: boolean) {
+  const price = PRICE[model]?.[size] ?? 0;
+  return batch ? price * BATCH_DISCOUNT : price;
+}
 
 export interface RefImage {
   data: Buffer;
@@ -18,7 +24,7 @@ export interface ImageRequest {
   prompt: string;
   refs: RefImage[];
   aspectRatio: string;
-  imageSize: "1K" | "2K" | "4K";
+  imageSize: ImageSize;
 }
 
 export interface GeneratedImage {
@@ -38,7 +44,7 @@ export class GeminiImages {
 
   async generate(req: ImageRequest): Promise<GeneratedImage> {
     const response = await this.ai.models.generateContent({ model: req.model, ...toRequest(req) });
-    return fromResponse(response, req.model, false);
+    return fromResponse(response, req.model, false, req.imageSize);
   }
 
   // Envía todas las solicitudes en un solo trabajo batch (mitad de precio) y espera
@@ -56,7 +62,7 @@ export class GeminiImages {
     let lastState = "";
     for (;;) {
       await new Promise((r) => setTimeout(r, (opts.pollSeconds ?? 30) * 1000));
-      const check = await this.checkBatch(jobName, requests.map((r) => r.key), model);
+      const check = await this.checkBatch(jobName, requests.map((r) => r.key), model, requests[0].req.imageSize);
       if (check.state !== lastState) {
         lastState = check.state;
         opts.log?.(`  batch ${lastState} (${Math.round((Date.now() - started) / 60000)} min)`);
@@ -82,6 +88,7 @@ export class GeminiImages {
     jobName: string,
     keys: string[],
     model: string,
+    size: ImageSize = "2K",
   ): Promise<{ state: string; done: boolean; error?: string; results?: Map<string, GeneratedImage | Error> }> {
     const current = await this.ai.batches.get({ name: jobName });
     const state = current.state ?? "JOB_STATE_UNSPECIFIED";
@@ -99,7 +106,7 @@ export class GeminiImages {
         return;
       }
       try {
-        results.set(key, fromResponse(r.response, model, true));
+        results.set(key, fromResponse(r.response, model, true, size));
       } catch (err) {
         results.set(key, err instanceof Error ? err : new Error(String(err)));
       }
@@ -127,18 +134,17 @@ function toRequest(req: ImageRequest) {
   };
 }
 
-function fromResponse(response: GenerateContentResponse, model: string, batch: boolean): GeneratedImage {
+function fromResponse(response: GenerateContentResponse, model: string, batch: boolean, size: ImageSize): GeneratedImage {
   const out = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
   if (!out?.inlineData?.data) {
     const reason = response.candidates?.[0]?.finishReason ?? response.promptFeedback?.blockReason ?? "desconocido";
     throw new Error(`Gemini no devolvió imagen (motivo: ${reason})`);
   }
-  const price = PRICE_2K[model] ?? 0;
   return {
     data: Buffer.from(out.inlineData.data, "base64"),
     mimeType: out.inlineData.mimeType ?? "image/png",
     model,
-    cost_usd: batch ? price * BATCH_DISCOUNT : price,
+    cost_usd: imagePrice(model, size, batch),
     batch,
   };
 }

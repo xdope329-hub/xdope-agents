@@ -27,14 +27,22 @@ const shotList: ShotList = {
   colors: [{ name: "Negro", attribute_value_id: "x", hex: "#151515", contrast_ok: true }],
   shots: [shot("n-1", "Negro", "front_mid"), shot("n-2", "Negro", "side"), shot("n-3", "Negro", "detail")],
 };
-const claude = { ask: async () => ({ embroidery_fidelity: 9, realism: 9, same_person: true, placement_ok: true, size_ok: true, stitch_texture_visible: true, garment_color_ok: true, extra_text: false, reasons: [] }) } as unknown as Claude;
+const qaOk = { embroidery_fidelity: 9, realism: 9, same_person: true, placement_ok: true, size_ok: true, stitch_texture_visible: true, garment_color_ok: true, extra_text: false, reasons: [] };
+// QA falla las primeras `failures` revisiones y después aprueba.
+const fakeClaude = (failures = 0) => {
+  let n = 0;
+  return { ask: async () => (n++ < failures ? { ...qaOk, embroidery_fidelity: 5, reasons: ["gafas deformadas"] } : qaOk) } as unknown as Claude;
+};
 
 function fakeGemini(batchState: { value: string }) {
-  const calls = { generate: 0, submit: 0, check: 0 };
+  const calls = { generate: 0, submit: [] as Array<{ keys: string[]; model: string; prompt: string }>, check: 0 };
   const img = async (batch: boolean): Promise<GeneratedImage> => ({ data: await png(), mimeType: "image/png", model: "m", cost_usd: batch ? 0.05 : 0.1, batch });
   const gemini = {
     generate: async () => (calls.generate++, img(false)),
-    submitBatch: async () => (calls.submit++, "batches/1"),
+    submitBatch: async (reqs: Array<{ key: string; req: { model: string; prompt: string } }>) => {
+      calls.submit.push({ keys: reqs.map((r) => r.key), model: reqs[0].req.model, prompt: reqs[0].req.prompt });
+      return `batches/${calls.submit.length}`;
+    },
     checkBatch: async (_job: string, keys: string[]) => {
       calls.check++;
       if (batchState.value !== "JOB_STATE_SUCCEEDED") return { state: batchState.value, done: false };
@@ -44,29 +52,47 @@ function fakeGemini(batchState: { value: string }) {
   return { gemini, calls };
 }
 
-const options = (gemini: GeminiImages): MockupOptions => ({
+const options = (gemini: GeminiImages, claude = fakeClaude(), batch = true): MockupOptions => ({
   claude, gemini, runId: "r1", design: { data: Buffer.from(""), mediaType: "image/jpeg", label: "" }, shotList, dir,
-  model: "m", escalationModel: "m2", maxCostUsd: 3, outSize: [40, 50], batch: true, waitForBatch: false, log: () => {},
+  model: "flash", retryModel: "pro", imageSize: "2K", maxCostUsd: 3, outSize: [40, 50], batch, waitForBatch: false, log: () => {},
 });
 
-describe("generateMockups con batch sin esperar", () => {
-  it("envía el batch, devuelve waiting y en otra llamada recoge los resultados sin repetir la primera toma", async () => {
+describe("generateMockups", () => {
+  it("todo en batch: primera foto, luego el resto con la identidad, sin generar al momento", async () => {
     const state = { value: "JOB_STATE_RUNNING" };
     const { gemini, calls } = fakeGemini(state);
 
-    const first = await generateMockups(options(gemini));
-    expect(first).toEqual({ kind: "waiting", job: "batches/1", state: "JOB_STATE_RUNNING" });
-    expect(calls).toMatchObject({ generate: 1, submit: 1 });
-    expect((await readProgress(dir))?.batch?.state).toBe("JOB_STATE_RUNNING");
+    expect(await generateMockups(options(gemini))).toEqual({ kind: "waiting", job: "batches/1", state: "JOB_STATE_RUNNING" });
+    expect(calls.submit.map((c) => c.keys)).toEqual([["n-1"]]);
+    expect((await readProgress(dir))?.batch).toMatchObject({ stage: "primera foto", state: "JOB_STATE_RUNNING" });
 
     expect((await generateMockups(options(gemini))).kind).toBe("waiting");
-    expect(calls.submit).toBe(1);
+    expect(calls.submit).toHaveLength(1);
 
     state.value = "JOB_STATE_SUCCEEDED";
     const done = await generateMockups(options(gemini));
     if (done.kind !== "done") throw new Error("debía terminar");
+    expect(calls.submit.map((c) => c.keys)).toEqual([["n-1"], ["n-2", "n-3"]]);
+    expect(calls.generate).toBe(0);
     expect(done.results.map((r) => [r.shot.shot_id, r.passed])).toEqual([["n-1", true], ["n-2", true], ["n-3", true]]);
-    expect(calls.generate).toBe(1);
-    expect(done.imageCost).toBeCloseTo(0.2);
+    expect(done.imageCost).toBeCloseTo(0.15);
+  });
+
+  it("reintenta en batch con el modelo de reintento y los motivos de QA", async () => {
+    const { gemini, calls } = fakeGemini({ value: "JOB_STATE_SUCCEEDED" });
+    const done = await generateMockups(options(gemini, fakeClaude(1)));
+    if (done.kind !== "done") throw new Error("debía terminar");
+    expect(calls.submit.map((c) => [c.keys, c.model])).toEqual([[["n-1"], "flash"], [["n-2", "n-3"], "flash"], [["n-1"], "pro"]]);
+    expect(calls.submit[2].prompt).toContain("gafas deformadas");
+    expect(done.results[0].attempts).toHaveLength(2);
+    expect(done.results.every((r) => r.passed)).toBe(true);
+  });
+
+  it("sin batch genera al momento", async () => {
+    const { gemini, calls } = fakeGemini({ value: "JOB_STATE_SUCCEEDED" });
+    const done = await generateMockups(options(gemini, fakeClaude(), false));
+    expect(done.kind).toBe("done");
+    expect(calls.generate).toBe(3);
+    expect(calls.submit).toHaveLength(0);
   });
 });
