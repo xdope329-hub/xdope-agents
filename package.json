@@ -1,0 +1,10 @@
+{
+  "name": "xdope-product-agents",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agentes para publicar hoodies bordados en xDope",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "scan": "node src/catalog/scan.js"
+  }
+}

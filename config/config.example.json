@@ -1,0 +1,32 @@
+{
+  "catalog": {
+    "photoDirs": ["C:/Users/Diego Benavides/Desktop/Embroidery supper pack/1. JUST PHOTOS of all designs"],
+    "designDirs": ["C:/Users/Diego Benavides/Desktop/Embroidery supper pack/2. Embroidery Designs"],
+    "output": "data/catalog.json"
+  },
+  "garment": {
+    "type": "hoodie",
+    "minColors": 3,
+    "colors": [
+      { "key": "negro", "label": "Negro", "hex": "#111111" },
+      { "key": "blanco", "label": "Blanco", "hex": "#F5F5F5" },
+      { "key": "gris_jaspeado", "label": "Gris jaspeado", "hex": "#9E9E9E" },
+      { "key": "azul_marino", "label": "Azul marino", "hex": "#1B2A49" },
+      { "key": "arena", "label": "Arena", "hex": "#D8C8A8" },
+      { "key": "verde_militar", "label": "Verde militar", "hex": "#4B5320" }
+    ],
+    "sizes": ["S", "M", "L", "XL"]
+  },
+  "shots": ["model_front", "embroidery_closeup", "garment_flat"],
+  "style": "Fotografía de producto de estudio, luz suave, fondo neutro, estética streetwear",
+  "llm": { "model": "claude-sonnet-5-5" },
+  "imageGen": { "provider": "TBD", "model": "TBD", "size": "1024x1280", "maxCostPerDesignUsd": 3 },
+  "qa": { "minScore": 4, "maxRetries": 2 },
+  "store": {
+    "price": 0,
+    "categorySlugs": ["hoodies"],
+    "taxName": "IVA",
+    "sizeChartAttachmentId": null,
+    "status": 0
+  }
+}
