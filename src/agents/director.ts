@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { MAX_CHEST_LEFT_CM, MAX_HOOP_CM, MIN_SHOTS_PER_COLOR, ShotList } from "../contracts/index.js";
+
+const MAX_FRAMED_CM = 9;
 import { MIN_GARMENT_CONTRAST, contrastWithPalette } from "../color.js";
 import type { Claude, ImageInput } from "../llm/claude.js";
 
@@ -16,6 +18,7 @@ const DirectorOutput = z.object({
     has_text: z.boolean(),
     best_placement: z.enum(["chest_left", "chest_center"]),
     embroidery_size_cm: z.object({ w: z.number(), h: z.number() }).describe("Tamaño real del bordado en la prenda, en cm"),
+    framed: z.boolean().describe("true si el bordado está encerrado en un marco o borde cuadrado, rectangular, circular u ovalado"),
     embroidery_description: z.string().describe("Descripción precisa del bordado para usar dentro de los prompts"),
   }),
   model_description: z.string().describe("UNA persona modelo, en inglés: edad, forma de la cara, ojos y color, cejas, nariz, labios, tono de piel, pelo (corte y color), vello facial explícito (p. ej. clean-shaven) y estilo"),
@@ -41,6 +44,7 @@ Reglas del producto:
 - Elige el color de hoodie de la lista que mejor contraste con los hilos del bordado para que se lea bien.
 - Ubicación y tamaño REALES del bordado (lo produce una máquina con bastidor máximo de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm):
   - Por defecto "chest_left": pequeño en el pecho izquierdo, unos 8–10 cm de ancho (máximo ${MAX_CHEST_LEFT_CM} cm).
+  - Si el bordado tiene un MARCO o borde cuadrado, rectangular, circular u ovalado (tipo parche, estampilla o viñeta que encierra el diseño), es una pieza PEQUEÑA: va en "chest_left", de 6 a 9 cm de ancho, nunca centrada ni grande. Dilo en cada prompt ("small framed patch-style embroidery about 8 cm wide on the left chest").
   - "chest_center" solo si el diseño necesita más tamaño para leerse (mucho detalle, texto o composición ancha): centrado en el pecho, entre 14 y ${MAX_HOOP_CM} cm de ancho, nunca más de ${MAX_HOOP_CM}×${MAX_HOOP_CM} cm. Nunca gigante ni ocupando todo el frente.
   - Da el tamaño en embroidery_size_cm y escríbelo en cada prompt (p. ej. "small embroidery about 9 cm wide on the left chest"). Los modelos de imágenes tienden a agrandar el bordado: prefiere el tamaño más pequeño con el que el diseño se lea bien.
 Cómo escribir cada prompt (en inglés, que el modelo de imágenes sigue mejor):
@@ -112,8 +116,15 @@ export async function runDirector(opts: {
       colors,
       shots,
     });
-    if (parsed.success) return { shotList: parsed.data, embroideryDescription: out.analysis.embroidery_description };
-    feedback = `\n\nTu respuesta anterior no cumplió estas reglas; corrígelas:\n${parsed.error.issues.map((i) => `- ${i.message}`).join("\n")}`;
+    // Bordados con marco: siempre pequeños en el pecho izquierdo (decisión de Diego, 2026-09-30).
+    const { framed, best_placement, embroidery_size_cm: size } = out.analysis;
+    const frameIssue =
+      framed && (best_placement !== "chest_left" || size.w > MAX_FRAMED_CM || size.h > MAX_FRAMED_CM)
+        ? [`El bordado tiene marco: va en chest_left y máximo ${MAX_FRAMED_CM}×${MAX_FRAMED_CM} cm (pediste ${best_placement} de ${size.w}×${size.h} cm)`]
+        : [];
+    if (parsed.success && !frameIssue.length) return { shotList: parsed.data, embroideryDescription: out.analysis.embroidery_description };
+    const issues = [...(parsed.success ? [] : parsed.error.issues.map((i) => i.message)), ...frameIssue];
+    feedback = `\n\nTu respuesta anterior no cumplió estas reglas; corrígelas:\n${issues.map((i) => `- ${i}`).join("\n")}`;
   }
   throw new Error("El Director de arte no produjo un plan válido en 3 intentos");
 }

@@ -2,9 +2,11 @@
 // recogerlos, crear lotes, reanudar y publicar. Uso: npm run gui (abre http://127.0.0.1:4646).
 // Cada acción corre `pipeline` como proceso aparte; el panel solo lee runs/ y consulta a Gemini.
 import { spawn } from "node:child_process";
-import { access, readFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type ServerResponse } from "node:http";
 import path from "node:path";
+import sharp from "sharp";
+import { readCatalog } from "../designs/library.js";
 import { GeminiImages } from "../images/gemini.js";
 import { readProgress } from "../images/mockups.js";
 import { parseQuality } from "../quality.js";
@@ -14,6 +16,9 @@ const env = process.env;
 const PORT = Number(env.GUI_PORT ?? 4646);
 const store = new RunStore(env.RUNS_DIR ?? "runs");
 const gemini = env.GEMINI_API_KEY ? new GeminiImages(env.GEMINI_API_KEY) : null;
+const CATALOG = env.DESIGNS_CATALOG ?? "designs.json";
+const THUMBS = path.join(store.dir, ".thumbs");
+const DESIGN_ID = /^[A-Za-z0-9_-]+$/;
 
 interface Job {
   id: number;
@@ -92,6 +97,36 @@ async function runsSummary() {
   return out.sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""));
 }
 
+// Catálogo de designs.json (npm run scan:library) con el lote de cada diseño, paginado y filtrable.
+async function designsPage(url: URL) {
+  const q = (url.searchParams.get("q") ?? "").trim().toLowerCase();
+  const filter = url.searchParams.get("filter") ?? "new";
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+  const perPage = 48;
+  const lotes = new Map<string, { run_id: string; status: string }>();
+  for (const r of await store.list()) if (r.design_id) lotes.set(r.design_id, { run_id: r.run_id, status: r.status });
+  const all = (await readCatalog(CATALOG))
+    .filter((d) => d.status !== "missing")
+    .filter((d) => (filter === "new" ? d.status === "new" && !lotes.has(d.design_id) : filter === "lote" ? lotes.has(d.design_id) : true))
+    .filter((d) => !q || d.name.toLowerCase().includes(q) || d.photo_path.toLowerCase().includes(q))
+    .sort((a, b) => a.photo_path.localeCompare(b.photo_path, "es", { numeric: true }));
+  const items = all.slice((page - 1) * perPage, page * perPage).map((d) => ({ design_id: d.design_id, name: d.name, photo_path: d.photo_path, status: d.status, lote: lotes.get(d.design_id) ?? null }));
+  return { total: all.length, page, per_page: perPage, items };
+}
+
+// Miniatura de la foto del bordado, generada una vez y guardada en runs/.thumbs/.
+async function designThumb(designId: string): Promise<Buffer> {
+  if (!DESIGN_ID.test(designId)) throw new Error("design_id inválido");
+  const file = path.join(THUMBS, `${designId}.jpg`);
+  if (await exists(file)) return readFile(file);
+  const entry = (await readCatalog(CATALOG)).find((d) => d.design_id === designId);
+  if (!entry || !env.DESIGNS_DIR) throw new Error("Diseño no encontrado");
+  const data = await sharp(path.join(env.DESIGNS_DIR, entry.photo_path)).rotate().resize(240, 240, { fit: "inside" }).jpeg({ quality: 78 }).toBuffer();
+  await mkdir(THUMBS, { recursive: true });
+  await writeFile(file, data);
+  return data;
+}
+
 // Consulta cada batch pendiente una vez. Si alguno terminó, arranca la recolección en segundo plano.
 async function checkBatches() {
   if (!gemini) throw new Error("Falta GEMINI_API_KEY en .env");
@@ -126,6 +161,10 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/") return send(res, 200, PAGE, "text/html; charset=utf-8");
     if (req.method === "GET" && url.pathname === "/api/runs") return send(res, 200, { runs: await runsSummary(), job: running() ?? jobs.at(-1) ?? null });
     if (req.method === "GET" && url.pathname === "/api/job") return send(res, 200, running() ?? jobs.at(-1) ?? null);
+    if (req.method === "GET" && url.pathname === "/api/designs") return send(res, 200, await designsPage(url));
+    if (req.method === "GET" && url.pathname.startsWith("/designs/") && url.pathname.endsWith("/thumb")) {
+      return send(res, 200, await designThumb(decodeURIComponent(url.pathname.split("/")[2])), "image/jpeg");
+    }
     if (req.method === "POST" && url.pathname === "/api/check-batches") return send(res, 200, await checkBatches());
     if (req.method === "POST" && url.pathname === "/api/action") {
       const body = JSON.parse((await readBody(req)) || "{}");
@@ -145,7 +184,7 @@ const server = createServer(async (req, res) => {
   }
 });
 
-function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean }): string[] {
+function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean; design_ids?: string[] }): string[] {
   const runId = (id?: string) => {
     if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) throw new Error("run_id inválido");
     return id;
@@ -154,7 +193,13 @@ function actionArgs(body: { action?: string; run_id?: string; count?: number; ba
     case "new": {
       const n = Math.floor(Number(body.count ?? 1));
       if (!(n >= 1 && n <= 20)) throw new Error("Cantidad entre 1 y 20");
-      return ["--designs", String(n), "--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : []), ...(body.review === false ? ["--auto-retries"] : [])];
+      return ["--designs", String(n), ...lotOptions(body)];
+    }
+    case "new-selected": {
+      const ids = body.design_ids ?? [];
+      if (!ids.length || ids.length > 20) throw new Error("Elige entre 1 y 20 diseños");
+      if (ids.some((id) => !DESIGN_ID.test(id))) throw new Error("design_id inválido");
+      return ["--design", ids.join(","), ...lotOptions(body)];
     }
     case "collect":
       return ["--collect"];
@@ -169,6 +214,10 @@ function actionArgs(body: { action?: string; run_id?: string; count?: number; ba
     default:
       throw new Error("Acción desconocida");
   }
+}
+
+function lotOptions(body: { batch?: boolean; quality?: string; review?: boolean }) {
+  return ["--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : []), ...(body.review === false ? ["--auto-retries"] : [])];
 }
 
 function readBody(req: import("node:http").IncomingMessage): Promise<string> {
@@ -206,6 +255,13 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;
 .muted{color:var(--muted)}.err{color:var(--bad);font-size:12px}.thumb{width:44px;height:44px;object-fit:cover;border-radius:6px}
 pre{white-space:pre-wrap;margin:0;max-height:320px;overflow:auto;font-size:12px}
 .actions{display:flex;gap:6px;flex-wrap:wrap}#msg{min-height:20px}
+input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);min-width:200px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin:12px 0}
+.dz{position:relative;border:2px solid var(--line);border-radius:10px;overflow:hidden;cursor:pointer;background:var(--bg)}
+.dz.sel{border-color:var(--accent)}.dz img{width:100%;aspect-ratio:1;object-fit:contain;display:block;background:#fff}
+.dz .cap{font-size:11px;padding:4px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dz .tag{position:absolute;top:6px;left:6px;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
+.dz input{position:absolute;top:6px;right:6px;width:18px;height:18px}
 </style></head><body><main>
 <h1>Agentes xDope</h1>
 <div class="bar">
@@ -222,6 +278,21 @@ pre{white-space:pre-wrap;margin:0;max-height:320px;overflow:auto;font-size:12px}
 </div>
 <div id="msg" class="muted"></div>
 <div class="card" id="batches" hidden></div>
+<div class="card">
+  <div class="bar" style="margin:0">
+    <b>Diseños</b>
+    <input type="search" id="dq" placeholder="Buscar por nombre o carpeta">
+    <select id="dfilter"><option value="new" selected>nuevos sin lote</option><option value="all">todos</option><option value="lote">con lote</option></select>
+    <button id="dtoggle">Mostrar</button>
+    <span class="muted" id="dcount"></span>
+    <button class="primary" id="dprocess" disabled>Procesar seleccionados (0)</button>
+    <button id="dclear">Limpiar selección</button>
+  </div>
+  <div id="dpanel" hidden>
+    <div class="grid" id="dgrid"></div>
+    <div class="bar" style="margin:0"><button id="dprev">Anterior</button><span class="muted" id="dpage"></span><button id="dnext">Siguiente</button></div>
+  </div>
+</div>
 <div class="card"><table><thead><tr><th></th><th>Lote</th><th>Estado</th><th>Batch</th><th>Fotos OK</th><th>Costo img.</th><th>Acciones</th></tr></thead><tbody id="runs"></tbody></table></div>
 <div class="card"><div class="muted" id="jobtitle">Sin acciones en curso</div><pre id="log"></pre></div>
 </main>
@@ -269,6 +340,7 @@ async function load() {
 function showJob(job) {
   busy = !!job && !job.finished_at;
   for (const id of ["collect", "new"]) $(id).disabled = busy;
+  if (typeof updateSel === "function") updateSel();
   document.querySelectorAll("[data-act]").forEach((b) => (b.disabled = busy));
   if (!job) return;
   $("jobtitle").textContent = (busy ? "En curso: " : "Última acción: ") + "pipeline " + job.args.join(" ") + (job.finished_at ? " · terminó " + (job.exit_code === 0 ? "bien" : "con error " + job.exit_code) : "");
@@ -295,6 +367,39 @@ $("check").onclick = async () => {
   $("check").disabled = false;
 };
 $("collect").onclick = () => act({ action: "collect" });
+// Selector de diseños: la selección se mantiene al cambiar de página o de filtro.
+const selected = new Set();
+let dpage = 1, dtotal = 0, dper = 48, dtimer;
+async function loadDesigns() {
+  const params = new URLSearchParams({ q: $("dq").value, filter: $("dfilter").value, page: String(dpage) });
+  const d = await api("/api/designs?" + params);
+  dtotal = d.total; dper = d.per_page;
+  $("dcount").textContent = d.total + " diseños";
+  $("dpage").textContent = "Página " + d.page + " de " + Math.max(1, Math.ceil(d.total / d.per_page));
+  $("dgrid").innerHTML = d.items.map((x) => {
+    const tag = x.lote ? '<span class="tag">lote: ' + esc(x.lote.status) + "</span>" : x.status !== "new" ? '<span class="tag">' + esc(x.status) + "</span>" : "";
+    return '<label class="dz' + (selected.has(x.design_id) ? " sel" : "") + '" title="' + esc(x.photo_path) + '"><img loading="lazy" src="/designs/' + encodeURIComponent(x.design_id) + '/thumb">' + tag +
+      '<input type="checkbox" data-id="' + esc(x.design_id) + '"' + (selected.has(x.design_id) ? " checked" : "") + '><div class="cap">' + esc(x.name) + "</div></label>";
+  }).join("") || '<span class="muted">Sin resultados. ¿Corriste npm run scan:library?</span>';
+}
+function updateSel() {
+  $("dprocess").textContent = "Procesar seleccionados (" + selected.size + ")";
+  $("dprocess").disabled = busy || selected.size === 0;
+}
+$("dgrid").onchange = (e) => { const id = e.target.dataset?.id; if (!id) return;
+  e.target.checked ? selected.add(id) : selected.delete(id); e.target.closest(".dz").classList.toggle("sel", e.target.checked); updateSel(); };
+$("dtoggle").onclick = () => { const hidden = !$("dpanel").hidden; $("dpanel").hidden = hidden; $("dtoggle").textContent = hidden ? "Mostrar" : "Ocultar"; if (!hidden) loadDesigns().catch((e) => msg(e.message, true)); };
+$("dq").oninput = () => { clearTimeout(dtimer); dtimer = setTimeout(() => { dpage = 1; $("dpanel").hidden = false; $("dtoggle").textContent = "Ocultar"; loadDesigns().catch((e) => msg(e.message, true)); }, 300); };
+$("dfilter").onchange = () => { dpage = 1; if (!$("dpanel").hidden) loadDesigns().catch((e) => msg(e.message, true)); };
+$("dprev").onclick = () => { if (dpage > 1) { dpage--; loadDesigns(); } };
+$("dnext").onclick = () => { if (dpage * dper < dtotal) { dpage++; loadDesigns(); } };
+$("dclear").onclick = () => { selected.clear(); updateSel(); if (!$("dpanel").hidden) loadDesigns(); };
+$("dprocess").onclick = async () => {
+  if (!confirm("¿Crear " + selected.size + " lote(s) con calidad " + $("quality").value + "?")) return;
+  await act({ action: "new-selected", design_ids: [...selected], batch: $("batch").checked, quality: $("quality").value, review: $("review").checked });
+  selected.clear(); updateSel(); if (!$("dpanel").hidden) loadDesigns();
+};
+
 $("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value, review: $("review").checked });
 $("refresh").onclick = () => load().catch((e) => msg(e.message, true));
 $("runs").onclick = (e) => { const b = e.target.closest("[data-act]"); if (!b) return;
