@@ -3,7 +3,7 @@ dist/
 .env
 .env.*
 !.env.example
-runs/
+/runs/
 designs.json
 schedule.json
 
@@ -23,3 +23,4 @@ out/
 *.dst
 *.pes
 *.jef
+config/defaults.json

@@ -45,6 +45,7 @@ const QUALITY_ARG = parseQuality(opt("quality") ?? env.IMAGE_QUALITY);
 const PUBLISH = flag("publish");
 const CATALOG = env.DESIGNS_CATALOG ?? "designs.json";
 const DEFAULTS_FILE = env.DEFAULTS_FILE ?? "config/defaults.json";
+const DESCRIPTION_TEMPLATE = env.DESCRIPTION_TEMPLATE ?? "config/description-template.html";
 
 const store = new RunStore(env.RUNS_DIR ?? "runs");
 
@@ -232,7 +233,8 @@ async function processRun(runId: string, log: (m: string) => void) {
   );
   const result = await runPublisher({
     api: api!, runId, environment: env.XDOPE_API_ENV === "prod" ? "prod" : "qa", adminUrl: env.XDOPE_ADMIN_URL!,
-    brief, listing, images, colorAttr, sizeAttr, taxId: defaults!.tax_id, log,
+    brief, listing, images, colorAttr, sizeAttr, taxId: defaults!.tax_id, sizeChartImageId: defaults!.size_chart_image_id,
+    descriptionTemplate: (await exists(DESCRIPTION_TEMPLATE)) ? await readFile(DESCRIPTION_TEMPLATE, "utf8") : undefined, log,
   });
   await store.writeArtifact(runId, "publish.json", PublishResult, result);
   await store.transition(runId, "inactive_created");
@@ -256,7 +258,7 @@ async function curatorCategories(): Promise<{ categories: StoreCategory[]; fallb
   }
   const base = new Set(defaults?.base_category_ids ?? []);
   const all = await api.categories();
-  const categories = all.filter((c) => !base.has(c.id)).map((c) => ({ category_id: c.id, name: c.name }));
+  const categories = all.filter((c) => !base.has(c.id) || c.id === defaults?.fallback_category_id).map((c) => ({ category_id: c.id, name: c.name }));
   const fallback = all.find((c) => c.id === defaults?.fallback_category_id)?.name ?? "General";
   return { categories, fallback };
 }

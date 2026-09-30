@@ -41,6 +41,8 @@ export function buildProductPayload(opts: {
   colorAttr: ApiAttribute;
   sizeAttr: ApiAttribute;
   taxId: string | null;
+  sizeChartImageId?: string | null;
+  descriptionTemplate?: string; // bloque fijo de la marca: reemplaza la descripción del Copywriter
 }) {
   const { brief, listing, colorAttr, sizeAttr } = opts;
   const value = (attr: ApiAttribute, id: string) => {
@@ -54,16 +56,16 @@ export function buildProductPayload(opts: {
     return brief.sizes.map((s) => {
       const sv = value(sizeAttr, s.attribute_value_id);
       return {
-        name: `${cv.value} / ${sv.value}`,
+        name: `${sv.value}/${cv.value}`,
         attribute_value_ids: [cv.id, sv.id],
         attribute_values: [
           { name: colorAttr.name, value: cv.value, id: cv.id, attribute_id: colorAttr.id },
           { name: sizeAttr.name, value: sv.value, id: sv.id, attribute_id: sizeAttr.id },
         ],
         price: brief.price.amount,
-        sale_price: brief.price.sale_price,
+        sale_price: brief.price.sale_price ?? brief.price.amount,
         quantity: brief.stock_per_variant,
-        sku: `XD-${brief.design_id}-${norm(c.name).replace(/[^a-z0-9]+/g, "")}-${norm(sv.value).replace(/[^a-z0-9]+/g, "")}`.toUpperCase(),
+        sku: `${brief.slug}_${sv.value}/${cv.value}`,
         stock_status: brief.stock_per_variant > 0 ? "in_stock" : "out_of_stock",
         status: 1,
         variation_images: opts.imagesByColor.get(c.name)!,
@@ -75,13 +77,15 @@ export function buildProductPayload(opts: {
     name: listing.title,
     slug: brief.slug,
     short_description: listing.short_description,
-    description: listing.description_html,
+    // La descripción es el bloque fijo de la marca (config/description-template.html); el texto del Copywriter solo si no hay bloque.
+    description: opts.descriptionTemplate ?? listing.description_html,
     type: "classified",
     product_type: "physical",
     status: 0,
     categories: brief.category_ids,
     tags: [...new Set([...listing.tags, runTag(opts.runId)])],
     tax_id: opts.taxId,
+    size_chart_image_id: opts.sizeChartImageId ?? null,
     attributes_ids: [colorAttr.id, sizeAttr.id],
     product_thumbnail_id: images[0],
     product_images: images,
@@ -105,6 +109,8 @@ export async function runPublisher(opts: {
   colorAttr: ApiAttribute;
   sizeAttr: ApiAttribute;
   taxId: string | null;
+  sizeChartImageId?: string | null;
+  descriptionTemplate?: string;
   log: (msg: string) => void;
 }): Promise<PublishResult> {
   const { api, brief } = opts;
@@ -120,7 +126,7 @@ export async function runPublisher(opts: {
     imagesByColor.set(img.color, [...(imagesByColor.get(img.color) ?? []), id]);
   }
 
-  const payload = buildProductPayload({ runId: opts.runId, brief, listing: opts.listing, imagesByColor, colorAttr: opts.colorAttr, sizeAttr: opts.sizeAttr, taxId: opts.taxId });
+  const payload = buildProductPayload({ runId: opts.runId, brief, listing: opts.listing, imagesByColor, colorAttr: opts.colorAttr, sizeAttr: opts.sizeAttr, taxId: opts.taxId, sizeChartImageId: opts.sizeChartImageId, descriptionTemplate: opts.descriptionTemplate });
   const saved = existing
     ? await api.request("PUT", `/product/${existing.id}`, payload)
     : await api.request("POST", "/product", payload);

@@ -1,10 +1,11 @@
 {
   "price": { "amount": 0, "sale_price": null },
-  "size_attribute_value_ids": ["<id de S>", "<id de M>", "<id de L>", "<id de XL>"],
+  "size_attribute_value_ids": ["<id de S>", "<id de M>", "<id de L>"],
   "base_category_ids": ["<id de Hoodies>"],
   "fallback_category_id": "<id de una categoría general>",
   "garment": { "type": "hoodie", "material": "<material>", "fit": "<fit>" },
   "stock_per_variant": 10,
   "embroidery_placement": "chest_left",
-  "tax_id": null
+  "tax_id": null,
+  "size_chart_image_id": null
 }

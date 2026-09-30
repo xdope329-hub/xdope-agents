@@ -42,7 +42,7 @@ export const ProductBrief = z.object({
   embroidery_size_cm: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
   garment: z.object({
     type: z.literal("hoodie"),
-    material: z.string().min(1),
+    material: z.string().min(1).optional(),
     weight_gsm: z.number().positive().optional(),
     fit: z.string().optional(),
   }),
@@ -107,13 +107,14 @@ export const Defaults = z.object({
   fallback_category_id: z.string().min(1),
   garment: z.object({
     type: z.literal("hoodie"),
-    material: z.string().min(1),
+    material: z.string().min(1).optional(),
     weight_gsm: z.number().positive().optional(),
     fit: z.string().optional(),
   }),
   stock_per_variant: z.number().int().nonnegative(),
   embroidery_placement: Placement,
   tax_id: z.string().min(1).nullable().default(null),
+  size_chart_image_id: z.string().min(1).nullable().default(null),
 });
 export type Defaults = z.infer<typeof Defaults>;
 

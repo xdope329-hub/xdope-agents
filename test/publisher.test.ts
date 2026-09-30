@@ -58,8 +58,10 @@ describe("buildProductPayload", () => {
     expect(p.status).toBe(0);
     expect(p.type).toBe("classified");
     expect(p.variations).toHaveLength(6);
-    expect(p.variations[0]).toMatchObject({ name: "Negro / M", attribute_value_ids: ["c-negro", "s-m"], price: 120000, variation_images: ["i1", "i2", "i3"] });
+    expect(p.variations[0]).toMatchObject({ name: "M/Negro", attribute_value_ids: ["c-negro", "s-m"], price: 120000, variation_images: ["i1", "i2", "i3"] });
     expect(new Set(p.variations.map((v) => v.sku)).size).toBe(6);
+    expect(p.variations[0].sku).toBe("hoodie-calcifer-bordado_M/Negro");
+    expect(buildProductPayload({ runId: "r1", brief, listing, imagesByColor, colorAttr, sizeAttr, taxId: null, descriptionTemplate: "<div>marca</div>" }).description).toBe("<div>marca</div>");
     expect(p.product_images).toEqual(["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9"]);
     expect(p.product_thumbnail_id).toBe("i1");
     expect(p.tags).toContain(runTag("r1"));
