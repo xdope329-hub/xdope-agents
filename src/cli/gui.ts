@@ -269,7 +269,7 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
   <button id="collect">Recoger y continuar lotes</button>
   <span class="muted">|</span>
   <label>Nuevo lote: <input type="number" id="count" min="1" max="20" value="1"></label>
-  <label>Calidad: <select id="quality"><option value="baja" selected>baja</option><option value="media">media</option><option value="alta">alta</option></select></label>
+  <label>Calidad: <select id="quality"><option value="economica">económica (prueba)</option><option value="baja" selected>baja</option><option value="media">media</option><option value="alta">alta</option></select></label>
   <label><input type="checkbox" id="batch" checked> batch (mitad de precio)</label>
   <label title="Si QA rechaza fotos, el lote espera a que las revises antes de gastar en reintentos"><input type="checkbox" id="review" checked> revisar antes de reintentar</label>
   <button id="new">Crear</button>

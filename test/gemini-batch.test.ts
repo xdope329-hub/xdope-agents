@@ -72,3 +72,12 @@ describe("GeminiImages.generateBatch", () => {
     ).rejects.toThrow("un modelo");
   });
 });
+
+describe("Nano Banana original", () => {
+  it("no envía imageSize, que ese modelo no acepta", async () => {
+    const { ai, created } = fakeAi(["JOB_STATE_SUCCEEDED"], []);
+    await new GeminiImages("x", ai).submitBatch([{ key: "a", req: { ...req, model: "gemini-2.5-flash-image", imageSize: "1K" } }], "t");
+    const src = (created[0] as { src: Array<{ config: { imageConfig: Record<string, unknown> } }> }).src;
+    expect(src[0].config.imageConfig).toEqual({ aspectRatio: "4:5" });
+  });
+});

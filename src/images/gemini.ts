@@ -5,6 +5,8 @@ export type ImageSize = "1K" | "2K" | "4K";
 const PRICE: Record<string, Partial<Record<ImageSize, number>>> = {
   "gemini-3.1-flash-image": { "1K": 0.067, "2K": 0.101, "4K": 0.151 },
   "gemini-3-pro-image": { "1K": 0.134, "2K": 0.134, "4K": 0.24 },
+  // Nano Banana original: precio único (estimado), resolución fija ~1K.
+  "gemini-2.5-flash-image": { "1K": 0.039, "2K": 0.039, "4K": 0.039 },
 };
 const BATCH_DISCOUNT = 0.5;
 
@@ -129,7 +131,8 @@ function toRequest(req: ImageRequest) {
     contents: [{ role: "user", parts }],
     config: {
       responseModalities: ["IMAGE"],
-      imageConfig: { aspectRatio: req.aspectRatio, imageSize: req.imageSize },
+      // gemini-2.5-flash-image no acepta imageSize (resolución fija).
+      imageConfig: req.model.startsWith("gemini-2.5") ? { aspectRatio: req.aspectRatio } : { aspectRatio: req.aspectRatio, imageSize: req.imageSize },
     },
   };
 }
