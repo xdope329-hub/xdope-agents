@@ -33,6 +33,7 @@ export interface MockupOptions {
   log: (msg: string) => void;
   colorDescriptions?: Record<string, string>; // nombre del color → descripción en inglés
   placementRefsDir?: string; // fotos de ejemplo de ubicación y escala: <preset>.jpg y enmarcado.jpg
+  placementGuide?: Buffer; // foto de ejemplo con el recuadro rojo que dibujó Diego; reemplaza la de ejemplo
 }
 
 export interface Attempt {
@@ -94,12 +95,16 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
   const identity = async (): Promise<ImageInput | null> => ((await exists(identityFile)) ? { data: await readFile(identityFile), mediaType: "image/jpeg", label: "" } : null);
 
   // Foto de ejemplo de ubicación y escala del bordado según su tamaño estándar (o enmarcado).
-  const placementRef = await (async () => {
+  const placementRef = o.placementGuide ?? (await (async () => {
     const a = o.shotList.analysis;
     if (!o.placementRefsDir || !a.size_preset) return null;
     const file = path.join(o.placementRefsDir, `${a.framed ? "enmarcado" : a.size_preset}.jpg`);
-    return (await exists(file)) ? await readFile(file) : null;
-  })();
+    // Desenfocada: conserva silueta, posición y escala, pero no el diseño ni la persona del ejemplo.
+    return (await exists(file)) ? await sharp(file).resize(768, 768, { fit: "inside" }).blur(6).jpeg({ quality: 85 }).toBuffer() : null;
+  })());
+  const placementRole = o.placementGuide
+    ? "Placement guide: the RED RECTANGLE marks where the embroidery goes on the chest and approximately its size. Place the embroidery inside that area, keeping its shape, and do NOT draw any rectangle. In shots with another angle, keep the same position on the chest. Do NOT copy the person, pose, background, garment color or design of this photo."
+    : "Placement reference: ONLY shows where the embroidery sits on the hoodie and how big it is relative to the body. Copy that position and scale. Do NOT copy its person, pose, background, garment color or design.";
 
   const request = async (shot: Shot, model: string): Promise<ImageRequest> => {
     const last = attemptsOf(shot).at(-1);
@@ -118,7 +123,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
           ? [{ role: "Reference 2: ONLY the face and hair of the model, cropped. Use this exact same person, but create a NEW photograph with the pose, camera angle, framing and background described in the prompt. Never copy the composition of another photo.", data: id.data, mimeType: id.mediaType }]
           : []),
         ...(placementRef
-          ? [{ role: "Placement reference: ONLY shows where the embroidery sits on the hoodie and how big it is relative to the body. Copy that position and scale. Do NOT copy its person, pose, background, garment color or design.", data: placementRef, mimeType: "image/jpeg" }]
+          ? [{ role: placementRole, data: placementRef, mimeType: "image/jpeg" }]
           : []),
       ],
       aspectRatio: "4:5",

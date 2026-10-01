@@ -7,6 +7,7 @@ import { createServer, type ServerResponse } from "node:http";
 import path from "node:path";
 import sharp from "sharp";
 import { readCatalog } from "../designs/library.js";
+import { readdir } from "node:fs/promises";
 import { GeminiImages } from "../images/gemini.js";
 import { readProgress } from "../images/mockups.js";
 import { parseQuality } from "../quality.js";
@@ -19,6 +20,7 @@ const gemini = env.GEMINI_API_KEY ? new GeminiImages(env.GEMINI_API_KEY) : null;
 const CATALOG = env.DESIGNS_CATALOG ?? "designs.json";
 const THUMBS = path.join(store.dir, ".thumbs");
 const DESIGN_ID = /^[A-Za-z0-9_-]+$/;
+const PLACEMENT_REFS = env.PLACEMENT_REFS_DIR ?? "config/placement-refs";
 
 interface Job {
   id: number;
@@ -162,6 +164,15 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/") return send(res, 200, PAGE, "text/html; charset=utf-8");
     if (req.method === "GET" && url.pathname === "/api/runs") return send(res, 200, { runs: await runsSummary(), job: running() ?? jobs.at(-1) ?? null });
     if (req.method === "GET" && url.pathname === "/api/job") return send(res, 200, running() ?? jobs.at(-1) ?? null);
+    if (req.method === "GET" && url.pathname === "/api/placement-refs") {
+      const files = (await exists(PLACEMENT_REFS)) ? await readdir(PLACEMENT_REFS) : [];
+      return send(res, 200, files.filter((f) => f.endsWith(".jpg")).map((f) => f.slice(0, -4)));
+    }
+    if (req.method === "GET" && url.pathname.startsWith("/placement-refs/")) {
+      const name = decodeURIComponent(url.pathname.slice("/placement-refs/".length));
+      if (!/^[a-z0-9_-]+\.jpg$/i.test(name)) return send(res, 404, { error: "no encontrado" });
+      return send(res, 200, await readFile(path.join(PLACEMENT_REFS, name)), "image/jpeg");
+    }
     if (req.method === "GET" && url.pathname === "/api/designs") return send(res, 200, await designsPage(url));
     if (req.method === "GET" && url.pathname.startsWith("/designs/") && url.pathname.endsWith("/thumb")) {
       return send(res, 200, await designThumb(decodeURIComponent(url.pathname.split("/")[2])), "image/jpeg");
@@ -185,7 +196,9 @@ const server = createServer(async (req, res) => {
   }
 });
 
-function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean; design_ids?: string[] }): string[] {
+type Box = { ref: string; x: number; y: number; w: number; h: number };
+
+function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean; design_ids?: string[]; placement_box?: Box | null }): string[] {
   const runId = (id?: string) => {
     if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) throw new Error("run_id inválido");
     return id;
@@ -217,8 +230,10 @@ function actionArgs(body: { action?: string; run_id?: string; count?: number; ba
   }
 }
 
-function lotOptions(body: { batch?: boolean; quality?: string; review?: boolean }) {
-  return ["--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : []), ...(body.review === false ? ["--auto-retries"] : [])];
+function lotOptions(body: { batch?: boolean; quality?: string; review?: boolean; placement_box?: Box | null }) {
+  const b = body.placement_box;
+  const box = b ? ["--box", `${b.ref}:${[b.x, b.y, b.w, b.h].map((n) => Number(n).toFixed(4)).join(",")}`] : [];
+  return ["--quality", parseQuality(body.quality), ...(body.batch === false ? ["--realtime"] : []), ...(body.review === false ? ["--auto-retries"] : []), ...box];
 }
 
 function readBody(req: import("node:http").IncomingMessage): Promise<string> {
@@ -242,7 +257,7 @@ const PAGE = `<!doctype html>
 <style>
 :root{--bg:#f6f6f4;--card:#fff;--fg:#141414;--muted:#6b6b6b;--line:#e4e4e0;--accent:#1f5eff;--ok:#137333;--warn:#a15c00;--bad:#b3261e}
 @media (prefers-color-scheme:dark){:root{--bg:#121212;--card:#1c1c1c;--fg:#eee;--muted:#9a9a9a;--line:#2e2e2e;--accent:#6b9bff;--ok:#5bc27a;--warn:#e0a23a;--bad:#ff7a70}}
-*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;font:14px/1.45 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
 main{max-width:1200px;margin:0 auto;padding:16px}h1{font-size:20px;margin:4px 0 16px}
 .bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
 button{font:inherit;padding:7px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);cursor:pointer}
@@ -288,6 +303,8 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
     <span class="muted" id="dcount"></span>
     <button class="primary" id="dprocess" disabled>Procesar seleccionados (0)</button>
     <button id="dclear">Limpiar selección</button>
+    <button id="bopen" title="Dibuja en una foto de ejemplo dónde quieres el bordado">Marcar ubicación</button>
+    <span class="muted" id="bstatus">ubicación: automática</span>
   </div>
   <div id="dpanel" hidden>
     <div class="grid" id="dgrid"></div>
@@ -295,6 +312,17 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
   </div>
 </div>
 <div class="card"><table><thead><tr><th></th><th>Lote</th><th>Estado</th><th>Batch</th><th>Fotos OK</th><th>Costo img.</th><th>Costo Claude</th><th>Acciones</th></tr></thead><tbody id="runs"></tbody></table></div>
+<div id="bmodal" hidden style="position:fixed;inset:0;background:#0009;z-index:10;display:flex;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:640px;width:100%;max-height:95vh;overflow:auto;margin:0">
+    <div class="bar" style="margin:0 0 8px"><b>Marca dónde va el bordado</b>
+      <select id="bref"></select><span class="muted">Arrastra para dibujar el recuadro</span></div>
+    <div id="bwrap" style="position:relative;display:inline-block;cursor:crosshair;user-select:none;touch-action:none">
+      <img id="bimg" style="display:block;max-width:100%;max-height:70vh" draggable="false">
+      <div id="brect" style="position:absolute;border:3px solid #f00;display:none;pointer-events:none"></div>
+    </div>
+    <div class="bar" style="margin:8px 0 0"><button class="primary" id="buse">Usar esta ubicación</button><button id="bclear">Quitar (automática)</button><button id="bclose">Cerrar</button></div>
+  </div>
+</div>
 <div class="card"><div class="muted" id="jobtitle">Sin acciones en curso</div><pre id="log"></pre></div>
 </main>
 <script>
@@ -401,13 +429,48 @@ $("dfilter").onchange = () => { dpage = 1; if (!$("dpanel").hidden) loadDesigns(
 $("dprev").onclick = () => { if (dpage > 1) { dpage--; loadDesigns(); } };
 $("dnext").onclick = () => { if (dpage * dper < dtotal) { dpage++; loadDesigns(); } };
 $("dclear").onclick = () => { selected.clear(); updateSel(); if (!$("dpanel").hidden) loadDesigns(); };
+// Recuadro de ubicación sobre una foto de ejemplo (coordenadas en fracciones de la foto).
+let placementBox = null, draft = null, start = null;
+function drawRect(b) {
+  const r = $("brect");
+  if (!b) { r.style.display = "none"; return; }
+  const W = $("bimg").clientWidth, H = $("bimg").clientHeight;
+  Object.assign(r.style, { display: "block", left: b.x * W + "px", top: b.y * H + "px", width: b.w * W + "px", height: b.h * H + "px" });
+}
+function pointer(e) {
+  const r = $("bimg").getBoundingClientRect();
+  return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) };
+}
+$("bopen").onclick = async () => {
+  const refs = await api("/api/placement-refs");
+  if (!refs.length) return msg("No hay fotos de ejemplo en config/placement-refs", true);
+  $("bref").innerHTML = refs.map((n) => "<option>" + esc(n) + "</option>").join("");
+  if (placementBox) $("bref").value = placementBox.ref;
+  draft = placementBox;
+  $("bimg").onload = () => drawRect(draft && draft.ref === $("bref").value ? draft : null);
+  $("bimg").src = "/placement-refs/" + encodeURIComponent($("bref").value) + ".jpg";
+  $("bmodal").hidden = false;
+};
+$("bref").onchange = () => { draft = null; $("bimg").src = "/placement-refs/" + encodeURIComponent($("bref").value) + ".jpg"; };
+$("bwrap").onpointerdown = (e) => { start = pointer(e); try { $("bwrap").setPointerCapture(e.pointerId); } catch {} };
+$("bwrap").onpointermove = (e) => { if (!start) return; const p = pointer(e);
+  draft = { ref: $("bref").value, x: Math.min(start.x, p.x), y: Math.min(start.y, p.y), w: Math.abs(p.x - start.x), h: Math.abs(p.y - start.y) }; drawRect(draft); };
+$("bwrap").onpointerup = () => { start = null; };
+$("buse").onclick = () => {
+  if (!draft || draft.w < 0.02 || draft.h < 0.02) return alert("Dibuja un recuadro sobre la foto");
+  placementBox = draft; $("bmodal").hidden = true;
+  $("bstatus").textContent = "ubicación: marcada (" + placementBox.ref + ")";
+};
+$("bclear").onclick = () => { placementBox = null; draft = null; drawRect(null); $("bstatus").textContent = "ubicación: automática"; $("bmodal").hidden = true; };
+$("bclose").onclick = () => { $("bmodal").hidden = true; };
+
 $("dprocess").onclick = async () => {
   if (!confirm("¿Crear " + selected.size + " lote(s) con calidad " + $("quality").value + "?")) return;
-  await act({ action: "new-selected", design_ids: [...selected], batch: $("batch").checked, quality: $("quality").value, review: $("review").checked });
+  await act({ action: "new-selected", design_ids: [...selected], batch: $("batch").checked, quality: $("quality").value, review: $("review").checked, placement_box: placementBox });
   selected.clear(); updateSel(); if (!$("dpanel").hidden) loadDesigns();
 };
 
-$("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value, review: $("review").checked });
+$("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value, review: $("review").checked, placement_box: placementBox });
 $("refresh").onclick = () => load().catch((e) => msg(e.message, true));
 $("runs").onclick = (e) => { const b = e.target.closest("[data-act]"); if (!b) return;
   if (b.dataset.act === "approve" && !confirm("¿Aprobar las fotos actuales de " + b.dataset.run + " por encima de QA? Revisa antes el review.")) return;

@@ -10,6 +10,7 @@
 //   npm run pipeline -- --retry <run_id>               tras revisar: hace los reintentos configurados de las fotos rechazadas
 //   … --publish   crea el producto INACTIVO en XDOPE_API_URL (sin esto el lote se queda listo en "qa")
 //   … --quality baja|media|alta   calidad de las fotos del lote nuevo (por defecto IMAGE_QUALITY o baja)
+//   … --box ref:x,y,w,h  ubicación marcada en una foto de ejemplo (fracciones 0–1) para los lotes nuevos
 //   … --auto-retries  el lote nuevo reintenta solo lo que QA rechaza, sin esperar la revisión de Diego
 //   … --realtime  genera las fotos al momento (precio completo). Por defecto todo va en batch de Gemini (mitad de
 //                 precio): el lote queda en "generating" y se recoge con --collect cuando cada batch termina.
@@ -29,6 +30,7 @@ import { approvedColors, decide, generateMockups, readProgress, toMockupSet, typ
 import { Claude, type ImageInput } from "../llm/claude.js";
 import { renderReview } from "../review.js";
 import { QUALITY, parseQuality } from "../quality.js";
+import { boxPlacement, guideImage, parseBox, type PlacementBox } from "../images/guide.js";
 import { RunStore } from "../runs/store.js";
 import { XdopeApi } from "../store/xdope.js";
 
@@ -45,6 +47,8 @@ const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
 const BATCH = !flag("realtime") && env.IMAGE_USE_BATCH !== "false";
 const QUALITY_ARG = parseQuality(opt("quality") ?? env.IMAGE_QUALITY);
+const BOX_ARG = opt("box") ? parseBox(opt("box")!) : null;
+const PLACEMENT_REFS = env.PLACEMENT_REFS_DIR ?? "config/placement-refs";
 const PUBLISH = flag("publish");
 const CATALOG = env.DESIGNS_CATALOG ?? "designs.json";
 const DEFAULTS_FILE = env.DEFAULTS_FILE ?? "config/defaults.json";
@@ -142,7 +146,7 @@ async function createRun(ref: string, reason: string): Promise<string> {
   await store.create(runId, designId);
   const jpg = await sharp(await readFile(photo)).rotate().resize(1536, 1536, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
   await writeFile(store.file(runId, "design.jpg"), jpg);
-  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH, review_before_retry: !flag("auto-retries") }, null, 2) + "\n");
+  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH, review_before_retry: !flag("auto-retries"), placement_box: BOX_ARG }, null, 2) + "\n");
   console.log(`[${runId}] lote creado para ${designId}`);
   return runId;
 }
@@ -173,7 +177,8 @@ async function processRun(runId: string, log: (m: string) => void) {
   let shotList = await store.readArtifact(runId, "shots.json", ShotList);
   if (!shotList) {
     log("Director de arte: colores, concepto y prompts…");
-    shotList = await store.writeArtifact(runId, "shots.json", ShotList, (await track(runId, "director", () => runDirector({ claude, runId, design, title: curator.title, palette }))).shotList);
+    const planned = (await track(runId, "director", () => runDirector({ claude, runId, design, title: curator.title, palette }))).shotList;
+    shotList = await store.writeArtifact(runId, "shots.json", ShotList, source.placement_box ? await applyBox(planned, source.placement_box, design) : planned);
     log(`  Colores: ${shotList.colors.map((c) => c.name).join(", ")} | ${shotList.shots.length} tomas`);
   }
   if (state.status === "design_ready") state = await store.transition(runId, "shots_planned");
@@ -183,10 +188,12 @@ async function processRun(runId: string, log: (m: string) => void) {
   let qa = (await store.readArtifact(runId, "qa.json", QaFile)) as { results: ShotResult[]; image_cost_usd: number } | null;
   if (!qa) {
     if (state.status === "shots_planned") state = await store.transition(runId, "generating");
+    const guide = source.placement_box ? await guideImage(PLACEMENT_REFS, source.placement_box) : undefined;
     const outcome = await track(runId, "qa", () => generateMockups({
       claude, gemini, runId, design, shotList, dir,
       ...QUALITY[parseQuality(source.quality)], maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: source.batch ?? BATCH, waitForBatch: false,
-      placementRefsDir: env.PLACEMENT_REFS_DIR ?? "config/placement-refs",
+      placementRefsDir: PLACEMENT_REFS,
+      placementGuide: guide,
       colorDescriptions: Object.fromEntries(palette.filter((c) => c.en).map((c) => [c.name, c.en!])),
       reviewBeforeRetry: source.review_before_retry ?? true, log,
     }));
@@ -315,6 +322,18 @@ async function buildBrief(runId: string, curator: CuratorPick, shotList: ShotLis
     stock_per_variant: d.stock_per_variant,
     title: curator.title,
     short_description: curator.short_description,
+  };
+}
+
+// La ubicación que marcó Diego reemplaza la del Director (ubicación y tamaño aproximados).
+async function applyBox(list: ShotList, box: PlacementBox, design: ImageInput): Promise<ShotList> {
+  const meta = await sharp(design.data).metadata();
+  const aspect = meta.width && meta.height ? meta.width / meta.height : 1;
+  const { placement, size } = boxPlacement(box, aspect);
+  return {
+    ...list,
+    analysis: { ...list.analysis, best_placement: placement, embroidery_size_cm: size, size_preset: "marcado por Diego" },
+    shots: list.shots.map((s) => ({ ...s, placement })),
   };
 }
 
