@@ -70,7 +70,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
    - `pecho_izquierdo` 9 cm en `chest_left`: diseños redondos, compactos o sin forma definida; por defecto.
    - `centro_pequeno` 10 cm, `centro_estandar` 15 cm (personaje o figura completa) y `centro_grande` 20 cm (composiciones anchas) en `chest_center`, arriba del pecho (8–10 cm bajo el cuello).
    - Con marco: siempre centrado; 20 cm si es un banner ancho (≥ 2:1), si no 10 cm.
-   - Si Diego marca un recuadro sobre una foto de ejemplo en el panel, ese recuadro manda: define ubicación y tamaño aproximados (sobre el Director) y Gemini recibe la foto desenfocada con el recuadro rojo; el bordado va dentro del recuadro.
+   - Si Diego marca un recuadro sobre una foto de ejemplo en el panel, ese recuadro manda: define ubicación y tamaño aproximados (sobre el Director) y Gemini recibe la foto desenfocada con el recuadro rojo; el bordado va dentro del recuadro. QA recibe la misma guía y evalúa ubicación y tamaño contra el recuadro (±30 %), no contra las reglas generales.
    - Cada imagen recibe una foto de ejemplo de ubicación y escala (`config/placement-refs/<tamaño>.jpg` o `enmarcado.jpg`, fotos de Diego, no se suben al repo).
    Cada prompt de imagen da el tamaño en cm y como % del ancho de la imagen según el encuadre, exige el hoodie puesto del color pedido (también en el primer plano) y aclara que el fondo y la escala de la foto de referencia no son el producto.
 3. **Define el concepto visual**: por defecto un **modelo humano realista** (edad, estilo, rasgos, peinado) coherente con el estilo del diseño; flat lay o prenda colgada solo como toma extra, nunca como las 3 fotos de un color. El mismo modelo se usa en todas las fotos del producto.

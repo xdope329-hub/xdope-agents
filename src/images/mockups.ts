@@ -146,7 +146,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     await writeFile(path.join(o.dir, candidate), data);
     const id = shot === first ? null : await identity();
     try {
-      const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity: id, shot, garmentColor: shot.color, size: o.shotList.analysis.embroidery_size_cm });
+      const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity: id, shot, garmentColor: shot.color, size: o.shotList.analysis.embroidery_size_cm, placementGuide: o.placementGuide });
       attemptsOf(shot).push({ model: img.batch ? `${model} (batch)` : model, candidate, cost_usd: img.cost_usd, qa });
       o.log(`  ${shot.shot_id}: ${qa.passed ? "OK" : "NO PASA"} (bordado ${qa.embroidery_fidelity}/10, realismo ${qa.realism}/10)`);
     } catch (err) {
