@@ -133,5 +133,8 @@ describe("generateMockups", () => {
     const withPreset = { ...shotList, analysis: { ...shotList.analysis, size_preset: "pecho_izquierdo", framed: false } };
     await generateMockups({ ...options(gemini), shotList: withPreset, placementRefsDir: refs });
     expect(calls.submit[0].roles.some((r) => r.startsWith("Placement reference"))).toBe(true);
+    // Las tomas que no son frontales no reciben la guía (con persona de frente), para no copiar la postura.
+    const rest = await generateMockups({ ...options(gemini), shotList: withPreset, placementRefsDir: refs });
+    expect(rest.kind).toBe("waiting");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { presetSize } from "../src/agents/director.js";
-import { hoodieLine, sizeLine } from "../src/images/mockups.js";
+import { hoodieLine, shotHeader, sizeLine } from "../src/images/mockups.js";
 import type { ShotList } from "../src/contracts/index.js";
 
 describe("tamaños estándar de bordado", () => {
@@ -27,5 +27,12 @@ describe("prompts de imagen", () => {
     const line = hoodieLine(shot("detail"), shotList, { "Vino Vintage": "deep washed burgundy wine red" });
     expect(line).toContain("Vino Vintage pullover hoodie (deep washed burgundy wine red, #6B2E3A)");
     expect(line).toContain("Never show a loose patch");
+  });
+
+  it("pone el tipo de toma, la pose y el fondo al inicio del prompt", () => {
+    const h = shotHeader({ framing: "three_quarter", pose: "mano en el bolsillo", background: "interior claro" } as never);
+    expect(h).toContain("THREE-QUARTER VIEW");
+    expect(h).toContain("POSE: mano en el bolsillo");
+    expect(h).toContain("BACKGROUND: interior claro");
   });
 });

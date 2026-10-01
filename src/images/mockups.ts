@@ -110,9 +110,11 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     const last = attemptsOf(shot).at(-1);
     const fix = last?.qa?.reasons.length ? `\n\nFix these problems found in the previous attempt: ${last.qa.reasons.join("; ")}` : "";
     const id = shot === first ? null : await identity();
+    // La guía de ubicación muestra a alguien de frente: solo se envía en la toma frontal para no copiar esa postura.
+    const sendPlacementRef = placementRef && shot.framing === "front_mid";
     return {
       model,
-      prompt: `${shot.prompt}${hoodieLine(shot, o.shotList, o.colorDescriptions)}${sizeLine(o.shotList, shot)}${FACE_LINE}${modelFaceLine(o.shotList, !!id)}\n\nAvoid: ${shot.negative_prompt}${fix}`,
+      prompt: `${shotHeader(shot)}\n\n${shot.prompt}${hoodieLine(shot, o.shotList, o.colorDescriptions)}${sizeLine(o.shotList, shot)}${FACE_LINE}${modelFaceLine(o.shotList, !!id)}\n\n${shotHeader(shot)}\n\nAvoid: ${shot.negative_prompt}, same pose as a front view, background of the reference images${fix}`,
       refs: [
         {
           role: "Reference 1: ONLY the embroidery design to reproduce as raised thread embroidery, identical shapes and thread colors. Ignore this photo's background (fabric, felt, hoop, paper), framing and scale: it is not the garment and not the size.",
@@ -120,10 +122,10 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
           mimeType: "image/jpeg",
         },
         ...(id
-          ? [{ role: "Reference 2: ONLY the face and hair of the model, cropped. Use this exact same person, but create a NEW photograph with the pose, camera angle, framing and background described in the prompt. Never copy the composition of another photo.", data: id.data, mimeType: id.mediaType }]
+          ? [{ role: "Reference 2: ONLY the face of the model (identity). Keep this exact same face and hair, but the head angle, body pose, camera angle, framing and background must follow the SHOT TYPE and BACKGROUND of the prompt, not this reference.", data: id.data, mimeType: id.mediaType }]
           : []),
-        ...(placementRef
-          ? [{ role: placementRole, data: placementRef, mimeType: "image/jpeg" }]
+        ...(sendPlacementRef
+          ? [{ role: placementRole, data: placementRef!, mimeType: "image/jpeg" }]
           : []),
       ],
       aspectRatio: "4:5",
@@ -293,13 +295,27 @@ export function hoodieLine(shot: Shot, shotList: ShotList, descriptions: Record<
   return `\n\nGARMENT: the person is wearing a ${shot.color} pullover hoodie (${desc}${color?.hex ?? ""}) with hood and kangaroo pocket, heavy cotton fleece. The hoodie color must be exactly this color.${detail} Never show a loose patch, a fabric swatch or an embroidery hoop.`;
 }
 
+// Tipo de toma al inicio y al final del prompt: con la pose en medio de un prompt largo, el modelo repetía la frontal.
+const SHOT_TYPES: Record<string, string> = {
+  front_mid: "front view, waist-up, the person faces the camera",
+  three_quarter: "THREE-QUARTER VIEW: the person's body is rotated about 45 degrees away from the camera (one shoulder clearly closer to the lens than the other), head turned back toward the camera, arms in a different position than a front pose",
+  side: "SIDE VIEW: the body is rotated about 80 degrees, nearly in profile, the chest embroidery still visible at an angle",
+  detail: "TIGHT CLOSE-UP of the chest: from the collarbones down to just below the embroidery; the face is NOT in the frame (crop below the mouth)",
+  back: "back view",
+  lifestyle: "candid lifestyle shot in motion",
+};
+
+export function shotHeader(shot: Shot): string {
+  return `SHOT TYPE: ${SHOT_TYPES[shot.framing] ?? shot.framing}. POSE: ${shot.pose ?? "natural"}. BACKGROUND: ${shot.background} (do not reuse the background of any reference image).`;
+}
+
 // Referencia de identidad: solo la cabeza (parte alta central de la foto frontal). Con la foto entera, el modelo
 // copiaba la misma pose y el mismo encuadre en las otras tomas.
 export async function faceCrop(file: string): Promise<Buffer> {
   const img = sharp(file);
   const { width = 0, height = 0 } = await img.metadata();
-  const w = Math.round(width * 0.6);
-  const h = Math.round(height * 0.45);
+  const w = Math.round(width * 0.45);
+  const h = Math.round(height * 0.38);
   return img
     .extract({ left: Math.round((width - w) / 2), top: 0, width: w, height: h })
     .resize(768, 768, { fit: "inside" })
