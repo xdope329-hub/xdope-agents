@@ -16,6 +16,7 @@
     "schedule:remove": "tsx src/cli/schedule-install.ts --remove",
     "schedule:preview": "tsx src/cli/schedule-preview.ts",
     "trial": "tsx --env-file-if-exists=.env src/cli/trial.ts",
+    "recolor": "tsx --env-file-if-exists=.env src/cli/recolor.ts",
     "pipeline": "tsx --env-file-if-exists=.env src/cli/pipeline.ts",
     "schedule:install": "tsx src/cli/schedule-install.ts",
     "gui": "tsx --env-file-if-exists=.env src/cli/gui.ts",

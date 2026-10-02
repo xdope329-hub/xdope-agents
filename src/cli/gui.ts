@@ -34,11 +34,11 @@ interface Job {
 const jobs: Job[] = [];
 const running = () => jobs.find((j) => j.finished_at === null) ?? null;
 
-function startJob(args: string[]): Job {
+function startJob(args: string[], script = "src/cli/pipeline.ts"): Job {
   if (running()) throw new Error("Ya hay una acción en curso; espera a que termine");
   const job: Job = { id: jobs.length + 1, args, started_at: new Date().toISOString(), finished_at: null, exit_code: null, log: [] };
   jobs.push(job);
-  const child = spawn(process.execPath, ["--import", "tsx", "src/cli/pipeline.ts", ...args], { env, cwd: process.cwd() });
+  const child = spawn(process.execPath, ["--import", "tsx", script, ...args], { env, cwd: process.cwd() });
   const push = (chunk: Buffer) => {
     job.log.push(...chunk.toString().split(/\r?\n/).filter(Boolean));
     if (job.log.length > 500) job.log.splice(0, job.log.length - 500);
@@ -98,6 +98,8 @@ async function runsSummary() {
       claude: await readJson(path.join(dir, "claude-usage.json")),
       has_listing: await exists(path.join(dir, "listing.json")),
       has_review: await exists(path.join(dir, "review.html")),
+      has_photos: !!qa || Object.values(progress?.attempts ?? {}).some((list) => list.some((a) => a.candidate)),
+      has_recolor: await exists(path.join(dir, "recolor.html")),
       admin_url: publish?.admin_url ?? null,
     });
   }
@@ -189,6 +191,10 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/check-batches") return send(res, 200, await checkBatches());
     if (req.method === "POST" && url.pathname === "/api/action") {
       const body = JSON.parse((await readBody(req)) || "{}");
+      if (body.action === "recolor") {
+        if (!body.run_id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(body.run_id)) throw new Error("run_id inválido");
+        return send(res, 200, startJob([body.run_id], "src/cli/recolor.ts"));
+      }
       const args = actionArgs(body);
       return send(res, 200, startJob(args));
     }
@@ -356,6 +362,8 @@ async function load() {
     const b = r.batch ? esc(r.batch.stage || "") + ": " + esc(STATE[r.batch.state] || r.batch.state) + '<div class="muted">enviado hace ' + ago(r.batch.submitted_at) + (r.batch.checked_at ? ", revisado hace " + ago(r.batch.checked_at) : "") + "</div>" : '<span class="muted">—</span>';
     const acts = [];
     if (r.has_review) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/review.html" target="_blank"><button>Ver review</button></a>');
+    if (r.has_photos) acts.push('<button data-act="recolor" data-run="' + esc(r.run_id) + '" title="Tiñe las fotos a los colores de la tienda sin IA (solo una máscara por foto)">' + (r.has_recolor ? "Rehacer recoloreado" : "Recolorear sin IA") + "</button>");
+    if (r.has_recolor) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/recolor.html" target="_blank"><button>Ver colores</button></a>');
     // Con la ficha lista, lo único pendiente es publicar: un fallo ahí solo ofrece reintentar la publicación.
     const readyToPublish = r.has_listing && (["qa", "publishing"].includes(r.status) || (r.status === "failed" && ["qa", "publishing"].includes(r.error?.step)));
     const a = r.awaiting_review;

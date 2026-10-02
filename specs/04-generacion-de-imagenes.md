@@ -99,6 +99,7 @@ Estimado con las tres: ≈ 10–11 imágenes × USD 0.05 ≈ **USD 0.55 por prod
 ## Experimento: recoloreado sin IA (aprobado para prueba el 2026-10-02)
 Objetivo: poder ofrecer más de un color (la regla 12 fija 1 color generado) sin pagar más fotos. Las 3 fotos se generan en el color del producto; Gemini devuelve una máscara de la tela (1 imagen por foto) y el código tiñe la tela a otros colores conservando luces y sombras (`src/images/recolor.ts`). Solo se tiñen píxeles dentro de la máscara y con croma cercano al color base, para no tocar el bordado.
 - Se prueba con `npm run trial -- --recolor [Color1,Color2] <fotos>` (sin lista, usa los 2 colores de la paleta más distintos al generado): `review.html` muestra cada foto generada y al lado sus versiones teñidas, con su puntaje de QA.
+- Vista previa por lote: botón "Recolorear sin IA" del panel (o `npm run recolor -- <lote> [--colors Negro,Beige]`). Tiñe las fotos del lote a todos los colores de `config/garment-colors.json` (los de la tienda) y deja `recolor.html` con una fila por color. Las máscaras se guardan, así que rehacerlo no cuesta. No publica nada.
 - Costo si se adopta: 3 máscaras por producto (≈ USD 0.06 en económica en batch), sin importar cuántos colores extra tenga.
 - Riesgo: teñir desde un hoodie oscuro sale peor que desde uno claro; colores oscuros teñidos desde uno claro pueden verse menos reales, y un bordado de hilos grises o blancos puede quedar dentro de la máscara. Solo pasa al pipeline si Diego aprueba el resultado de la prueba; las fotos teñidas pasan por el mismo QA.
 

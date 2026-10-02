@@ -40,6 +40,7 @@ npm run gui                       # abre el panel
 - **Marcar ubicación** (opcional): eliges una foto de ejemplo y dibujas un recuadro donde quieres el bordado. Se aplica a los lotes que crees después (galería o "Crear"): define ubicación y tamaño aproximados y Gemini recibe la foto desenfocada con el recuadro rojo como guía.
 - **Revisión antes de reintentar** (activada por defecto al crear): si QA rechaza fotos, el lote queda en "revisión pendiente" sin gastar más. Revisa el review y elige **Fotos OK** (aprueba las fotos actuales por encima de QA) o **Hacer reintentos** (los reintentos configurados, con su costo estimado). Un lote que falló en QA también ofrece **Fotos OK**.
 - **Recoger y continuar lotes:** lo mismo que `npm run pipeline -- --collect`.
+- **Recolorear sin IA / Ver colores:** en cada lote con fotos, tiñe esas fotos a los colores de la tienda (`config/garment-colors.json`) y abre una vista previa con una fila por color. Solo paga una máscara por foto (la primera vez). Lo mismo que `npm run recolor -- <lote>`.
 - **Crear:** lanza N lotes nuevos con el diseño nuevo más antiguo del catálogo, con la calidad elegida (económica = Nano Banana original por defecto, baja 1K, media 2K, alta 2K + reintento con Pro). Con "batch" (por defecto) todas las fotos van a Gemini Batch a mitad de precio en tres pasos (primera foto → las otras dos → reintentos); la acción termina enseguida y cada paso se recoge con "Revisar batches".
 - Por lote: **Ver review**, **Continuar / Reintentar**, **Publicar (inactivo)** y **Abrir en admin**.
 
