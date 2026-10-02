@@ -28,7 +28,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Qué hace**
 1. **Elige una imagen** entre los diseños `new` que no tengan producto. Criterios, en orden: no es `low_res`; no se parece a un producto ya publicado (comparación de embeddings de imagen); alterna temas y estilos respecto a los últimos 5 lotes; a igualdad, el más antiguo primero. Guarda el motivo de la elección.
 2. **Mira la imagen** con un modelo de visión para entender qué muestra y su estilo.
-3. **Redacta el título** (nombre del producto): corto, creativo y divertido, ≤ 30 caracteres (2 a 4 palabras), con humor, juego de palabras o jerga colombiana, relacionado con el diseño. No repite "Hoodie", "Bordado" ni colores, y nada genérico tipo "Retrato Urbano con Letras Rosa y Negro" (decisión de Diego, 2026-09-30). Propone 3 opciones y elige una con su razón.
+3. **Redacta el título** (nombre del producto): corto, creativo y divertido, ≤ 30 caracteres (2 a 4 palabras), con humor, juego de palabras o jerga colombiana, relacionado con el diseño. No repite "Hoodie", "Bordado" ni colores, y nada genérico tipo "Retrato Urbano con Letras Rosa y Negro" (decisión de Diego, 2026-09-30). Por defecto: **económica** (Nano Banana original, ~1K), aprobada por Diego el 2026-10-02. Propone 3 opciones y elige una con su razón.
 4. **Redacta la descripción corta creativa**: 1–2 frases, ≤ 160 caracteres, con el tono de marca. Es la que va en `short_description`.
 5. **Categoriza el producto** según lo que muestra el diseño (Anime, Animales, Videojuegos, etc.), eligiendo **solo entre las categorías que ya existen en la tienda** (`GET /category`):
    - 1 categoría temática principal y, si aplica, hasta 2 secundarias (ej. un gato de anime: Anime + Animales).
@@ -91,7 +91,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Entradas:** `ShotList` (una toma, con su prompt), `DesignAsset`, y la imagen de referencia de identidad (modelo o prenda) del color para mantener consistencia.
 **Salida:** 2–3 candidatas por toma dentro de `MockupSet`, con metadatos (API, modelo, prompt, semilla, costo).
 **Criterios de aceptación**
-- Formato de tienda 1080×1350 (4:5). Calidad por lote que elige Diego: **media** y **alta** generan a 2K y se reducen; **baja** (por defecto) genera a 1K y se amplía a 1080×1350 para ahorrar, con menos nitidez (decisión de Diego, 2026-09-30).
+- Formato de tienda 1080×1350 (4:5). Calidad por lote que elige Diego: **media** y **alta** generan a 2K y se reducen; **baja** genera a 1K y se amplía a 1080×1350 para ahorrar, con menos nitidez (decisión de Diego, 2026-09-30).
 - Archivo final JPG o WebP de menos de 10 MB (límite de `POST /attachment`).
 - Respeta el tope de costo del lote.
 - Nunca devuelve una imagen sin su `meta.json`.
