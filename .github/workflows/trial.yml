@@ -11,10 +11,14 @@ on:
         description: "Usar batch de Gemini (mitad de precio, puede tardar horas)"
         type: boolean
         default: false
-      image_model:
-        description: "Modelo de imágenes principal"
+      recolor:
+        description: "Experimento: teñir por código las fotos a los otros colores y mostrarlas al lado"
+        type: boolean
+        default: false
+      quality:
+        description: "Calidad: economica, baja, media o alta"
         required: false
-        default: "gemini-3.1-flash-image"
+        default: "economica"
 
 jobs:
   trial:
@@ -31,17 +35,18 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          IMAGE_MODEL: ${{ inputs.image_model }}
           DESIGN_URLS: ${{ inputs.design_urls }}
           IMAGE_USE_BATCH: ${{ inputs.batch }}
+          IMAGE_QUALITY: ${{ inputs.quality }}
+          RECOLOR: ${{ inputs.recolor && '--recolor' || '' }}
         run: |
           if [ -n "$DESIGN_URLS" ]; then
-            npm run trial -- "$DESIGN_URLS"
+            npm run trial -- $RECOLOR "$DESIGN_URLS"
           else
             shopt -s nullglob nocaseglob
             files=(samples/*.jpg samples/*.jpeg samples/*.png samples/*.webp)
             if [ ${#files[@]} -eq 0 ]; then echo "No hay URLs ni fotos en samples/"; exit 1; fi
-            npm run trial -- "${files[@]}"
+            npm run trial -- $RECOLOR "${files[@]}"
           fi
       - name: Guardar resultados
         if: always()

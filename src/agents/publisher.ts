@@ -5,6 +5,12 @@ import type { ApiAttribute, XdopeApi } from "../store/xdope.js";
 
 export const runTag = (runId: string) => `agent-run:${runId}`;
 
+// SKU de variante en el formato de la tienda, con el número del diseño al inicio para encontrarlo al bordar:
+// 207_hoodie-calcifer_M/Negro. Si la foto no tiene número, queda <slug>_<talla>/<color>.
+export function variantSku(brief: Pick<ProductBrief, "slug" | "design_number">, color: string, size: string) {
+  return `${brief.design_number ? `${brief.design_number}_` : ""}${brief.slug}_${size}/${color}`;
+}
+
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
 
 // Atributo de color de la tienda: el que se llama "Color" o, si no hay, el de estilo color.
@@ -65,7 +71,7 @@ export function buildProductPayload(opts: {
         price: brief.price.amount,
         sale_price: brief.price.sale_price ?? brief.price.amount,
         quantity: brief.stock_per_variant,
-        sku: `${brief.slug}_${sv.value}/${cv.value}`,
+        sku: variantSku(brief, cv.value, sv.value),
         stock_status: brief.stock_per_variant > 0 ? "in_stock" : "out_of_stock",
         status: 1,
         variation_images: opts.imagesByColor.get(c.name)!,
@@ -83,7 +89,7 @@ export function buildProductPayload(opts: {
     product_type: "physical",
     status: 0,
     categories: brief.category_ids,
-    tags: [...new Set([...listing.tags, runTag(opts.runId)])],
+    tags: [...new Set([...listing.tags, ...(brief.design_number ? [`diseno-${brief.design_number}`] : []), runTag(opts.runId)])],
     tax_id: opts.taxId,
     size_chart_image_id: opts.sizeChartImageId ?? null,
     attributes_ids: [colorAttr.id, sizeAttr.id],

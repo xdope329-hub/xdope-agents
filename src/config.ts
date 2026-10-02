@@ -22,7 +22,7 @@ const ConfigShape = z.object({
 
   IMAGE_PROVIDER: z.enum(["gemini", "flux"]).default("gemini"),
   IMAGE_MODEL: z.string().default("gemini-3.1-flash-image"),
-  IMAGE_ESCALATION_MODEL: z.string().default("gemini-3-pro-image"),
+  IMAGE_ESCALATION_MODEL: z.string().default("gemini-3.1-flash-image"),
   IMAGE_OUTPUT_SIZE: z
     .string()
     .regex(/^\d+x\d+$/)

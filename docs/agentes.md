@@ -161,7 +161,7 @@ Solo las fotos con modelo usan la API de imágenes; el resto se hace localmente,
      impuesto de la config,
      `product_thumbnail_id` = `model_front` del primer color, `product_images` = todas,
      `size_chart_image_id` de la config y una variación por Color × Talla con `variation_images` = mockups de ese color.
-  6. SKU: `XD-HOOD-<id>-<COLOR>-<TALLA>`.
+  6. SKU: `XD-HOOD-<id>-<COLOR>-<TALLA>` en el pipeline anterior; el pipeline actual usa `<número>_<slug>_<talla>/<color>` (ver specs/02-agentes.md).
 - **Salida:** `publish.json` con `product_id`, slug y enlace al dashboard; catálogo marcado `published`.
 - **Aceptación:** el producto aparece en el dashboard como inactivo con todas las variantes e imágenes.
   Nunca publica con `status: 1`: activar es decisión de Diego.

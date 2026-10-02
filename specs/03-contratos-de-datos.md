@@ -55,6 +55,7 @@ Esquemas mínimos. Se implementan como JSON Schema (o Pydantic/Zod) y cada agent
   "slug": "hoodie-dragon-negro",
   "category_ids": ["<id de categoría en la API>"],
   "design_id": "d_3f9a1c",
+  "design_number": "207 (número del nombre de la foto; null si no tiene)",
   "embroidery_placement": "chest_left | chest_center | back | sleeve_left | sleeve_right",
   "embroidery_size_cm": {"w": 9, "h": 7},
   "garment": {"type": "hoodie", "material": "algodón 80% / poliéster 20%", "weight_gsm": 350, "fit": "oversize"},

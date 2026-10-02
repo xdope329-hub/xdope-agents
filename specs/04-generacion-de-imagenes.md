@@ -20,7 +20,7 @@ Fuentes: [precios Gemini API](https://ai.google.dev/gemini-api/docs/pricing), [m
 ## Decisión
 Diego pidió (2026-09-30): fotos verticales 1080×1350, calidad decente sin ser la máxima, y modelos que parezcan personas reales.
 - **Principal: Nano Banana 2 (`gemini-3.1-flash-image`) a 2K.** Calidad suficiente para 1080×1350 a ≈ USD 0.10 por imagen, con referencias de objeto (bordado) y de personaje (modelo).
-- **Escalamiento: Nano Banana Pro** solo para las tomas que Nano Banana 2 no logra pasar en QA (fidelidad o realismo) tras el primer reintento. Así se paga el modelo caro solo cuando hace falta.
+- **Modelo y reintento según la calidad del lote** (económica por defecto, ver "Reducción de costo"). Nano Banana Pro solo entra en la calidad alta.
 - **Respaldo de proveedor: FLUX.2 [flex]**, con el mismo adaptador `ImageProvider`, si Gemini falla o no convence en la prueba.
 - **La decisión se confirma con una prueba comparativa** (tarea 8a del plan): 2 diseños reales × 3 tomas × {Nano Banana Pro, Nano Banana 2, FLUX.2 [flex]}, medidos con los umbrales del QA visual. Gana la de mayor tasa de aprobación; a igualdad, la más barata.
 
@@ -87,5 +87,13 @@ Todas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueb
 2. **Modelos de la casa.** En vez de inventar un modelo por producto, se mantiene un elenco fijo de 3–4 personas (`models/` con su imagen de identidad aprobada por Diego). El Director de arte elige uno según el estilo del diseño. Ahorra la imagen de identidad por producto y da una cara de marca consistente.
 3. **Menos reintentos.** Antes de generar, el Director de arte valida el prompt contra una lista de errores conocidos, y QA corre primero los chequeos baratos (OCR, color, SSIM) y solo después el modelo de visión. Meta: bajar reintentos de ~30 % a ~15 %.
 Estimado con las tres: ≈ 10–11 imágenes × USD 0.05 ≈ **USD 0.55 por producto** (≈ USD 16 por 30 productos), más el escalamiento a Pro cuando haga falta (también en batch).
+
+4. **Generar a 1K (aprobado por Diego el 2026-10-02).** Nano Banana 2 a 1K cuesta USD 0.067 (0.0335 en batch) contra 0.101 a 2K; en 4:5 sale de unos 928×1152 y se amplía a 1080×1350. Es la calidad **baja**; la **económica** también sale a ~1K.
+
+## Experimento: recoloreado sin IA (aprobado para prueba el 2026-10-02)
+Objetivo: poder ofrecer más de un color (la regla 12 fija 1 color generado) sin pagar más fotos. Las 3 fotos se generan en el color del producto; Gemini devuelve una máscara de la tela (1 imagen por foto) y el código tiñe la tela a otros colores conservando luces y sombras (`src/images/recolor.ts`). Solo se tiñen píxeles dentro de la máscara y con croma cercano al color base, para no tocar el bordado.
+- Se prueba con `npm run trial -- --recolor [Color1,Color2] <fotos>` (sin lista, usa los 2 colores de la paleta más distintos al generado): `review.html` muestra cada foto generada y al lado sus versiones teñidas, con su puntaje de QA.
+- Costo si se adopta: 3 máscaras por producto (≈ USD 0.06 en económica en batch), sin importar cuántos colores extra tenga.
+- Riesgo: teñir desde un hoodie oscuro sale peor que desde uno claro; colores oscuros teñidos desde uno claro pueden verse menos reales, y un bordado de hilos grises o blancos puede quedar dentro de la máscara. Solo pasa al pipeline si Diego aprueba el resultado de la prueba; las fotos teñidas pasan por el mismo QA.
 
 **Opción a evaluar en la prueba:** FLUX.2 [pro] (≈ USD 0.03 por megapíxel) queda en un rango parecido. **Descartado:** FLUX.2 [klein] local, porque la GPU de Diego no alcanza (2026-09-30).

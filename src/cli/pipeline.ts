@@ -24,7 +24,7 @@ import { runCurator, type StoreCategory } from "../agents/curator.js";
 import { runDirector, type GarmentColor } from "../agents/director.js";
 import { attributeOfValues, colorAttribute, resolveColors, runPublisher, runTag } from "../agents/publisher.js";
 import { CuratorPick, Defaults, MIN_COLORS, MockupSet, ProductBrief, ProductListing, PublishResult, ShotList } from "../contracts/index.js";
-import { readCatalog, writeCatalog } from "../designs/library.js";
+import { designNumber, readCatalog, writeCatalog } from "../designs/library.js";
 import { GeminiImages } from "../images/gemini.js";
 import { approvedColors, decide, generateMockups, readProgress, toMockupSet, type ShotResult } from "../images/mockups.js";
 import { Claude, type ImageInput } from "../llm/claude.js";
@@ -127,7 +127,8 @@ async function createRun(ref: string, reason: string): Promise<string> {
   let photo: string;
   let name: string;
   const catalog = await readCatalog(CATALOG);
-  const entry = catalog.find((d) => d.design_id === ref);
+  // Se acepta el design_id o el número de la foto (--design 207).
+  const entry = catalog.find((d) => d.design_id === ref) ?? catalog.find((d) => d.status !== "missing" && designNumber(d.photo_path) === ref.replace(/^0+(?=\d)/, ""));
   if (entry) {
     if (!env.DESIGNS_DIR) throw new Error("Falta DESIGNS_DIR");
     designId = entry.design_id;
@@ -146,7 +147,7 @@ async function createRun(ref: string, reason: string): Promise<string> {
   await store.create(runId, designId);
   const jpg = await sharp(await readFile(photo)).rotate().resize(1536, 1536, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 92 }).toBuffer();
   await writeFile(store.file(runId, "design.jpg"), jpg);
-  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH, review_before_retry: !flag("auto-retries"), placement_box: BOX_ARG }, null, 2) + "\n");
+  await writeFile(store.file(runId, "source.json"), JSON.stringify({ design_id: designId, design_number: designNumber(photo), photo, selection_reason: reason, quality: QUALITY_ARG, batch: BATCH, review_before_retry: !flag("auto-retries"), placement_box: BOX_ARG }, null, 2) + "\n");
   console.log(`[${runId}] lote creado para ${designId}`);
   return runId;
 }
@@ -245,7 +246,7 @@ async function processRun(runId: string, log: (m: string) => void) {
   const sizeAttr = attributeOfValues(attrs, defaults!.size_attribute_value_ids);
   let brief = await store.readArtifact(runId, "brief.json", ProductBrief);
   if (!brief) {
-    brief = await store.writeArtifact(runId, "brief.json", ProductBrief, await buildBrief(runId, curator, shotList, colors, colorAttr));
+    brief = await store.writeArtifact(runId, "brief.json", ProductBrief, await buildBrief(runId, curator, shotList, colors, colorAttr, source.design_number ?? designNumber(source.photo)));
   }
   if (state.status === "qa") state = await store.transition(runId, "publishing");
   const images = await Promise.all(
@@ -283,7 +284,7 @@ async function curatorCategories(): Promise<{ categories: StoreCategory[]; fallb
   return { categories, fallback };
 }
 
-async function buildBrief(runId: string, curator: CuratorPick, shotList: ShotList, colors: string[], colorAttr: ReturnType<typeof colorAttribute>) {
+async function buildBrief(runId: string, curator: CuratorPick, shotList: ShotList, colors: string[], colorAttr: ReturnType<typeof colorAttribute>, designNum: string | null) {
   const d = defaults!;
   // Las categorías del Curador se buscan por nombre en la tienda (pudo correr con la lista de prueba).
   const storeCats = await api!.categories();
@@ -314,6 +315,7 @@ async function buildBrief(runId: string, curator: CuratorPick, shotList: ShotLis
     slug: productSlug,
     category_ids: categoryIds,
     design_id: curator.design_id,
+    design_number: designNum,
     embroidery_placement: shotList.analysis.best_placement,
     garment: d.garment,
     colors: resolved.map((c) => ({ ...c, hex: shotList.colors.find((x) => x.name === c.name)!.hex })),

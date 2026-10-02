@@ -3,13 +3,19 @@
 // Uso: npm run trial -- [--batch] <ruta o URL de imagen> [...]
 // --batch: la primera foto (la que fija a la persona modelo) sale en modo normal y las demás
 // van en un trabajo batch de Gemini a mitad de precio; puede tardar desde minutos hasta horas.
+// --recolor [Color1,Color2]: experimento (specs/04). Tiñe por código las fotos del color elegido a otros colores
+// de la paleta (por defecto los 2 más distintos) y las muestra al lado en review.html para comparar.
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import { runCurator, type StoreCategory } from "../agents/curator.js";
 import { runDirector, type GarmentColor } from "../agents/director.js";
 import { GeminiImages } from "../images/gemini.js";
-import { generateMockups } from "../images/mockups.js";
+import { generateMockups, type ShotResult } from "../images/mockups.js";
+import { garmentMask, recolorGarment } from "../images/recolor.js";
+import { runQa } from "../agents/qa.js";
+import { deltaE, hexToRgb, rgbToLab } from "../color.js";
+import type { ShotList } from "../contracts/index.js";
 import { Claude, type ImageInput } from "../llm/claude.js";
 import { QUALITY, parseQuality } from "../quality.js";
 import { renderReview } from "../review.js";
@@ -21,7 +27,11 @@ const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Num
 const args = process.argv.slice(2);
 const BATCH = args.includes("--batch") || env.IMAGE_USE_BATCH === "true";
 const QUALITY_NAME = parseQuality(env.IMAGE_QUALITY);
-const sources = args.filter((a) => a !== "--batch").flatMap((a) => a.split(/[\s,]+/)).filter(Boolean);
+const recolorAt = args.indexOf("--recolor");
+const RECOLOR = recolorAt >= 0;
+// Lista opcional de colores justo después de --recolor (si no es una ruta ni URL de imagen).
+const recolorArg = RECOLOR && args[recolorAt + 1] && !/[\\/.]/.test(args[recolorAt + 1]) && !args[recolorAt + 1].startsWith("--") ? args[recolorAt + 1] : null;
+const sources = args.filter((a, i) => !a.startsWith("--") && !(recolorArg && i === recolorAt + 1)).flatMap((a) => a.split(/[\s,]+/)).filter(Boolean);
 if (sources.length === 0) throw new Error("Pasa al menos una ruta o URL de imagen de bordado");
 if (!env.GEMINI_API_KEY) throw new Error("Falta GEMINI_API_KEY");
 if (!env.ANTHROPIC_API_KEY) throw new Error("Falta ANTHROPIC_API_KEY");
@@ -87,6 +97,7 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
   if (outcome.kind !== "done") throw new Error("La generación no terminó");
   const { results, imageCost } = outcome;
 
+  const recolor = RECOLOR ? await recolorShots(shotList, results, design, dir, log) : null;
   const passed = results.filter((r) => r.passed).length;
   log(`Fotos aprobadas: ${passed}/${results.length} | costo imágenes USD ${imageCost.toFixed(2)}`);
   const summary = {
@@ -98,7 +109,50 @@ async function runDesign(src: string, designId: string, dir: string, log: (m: st
     shots: results.map(({ shot, file, attempts, passed }) => ({ shot_id: shot.shot_id, color: shot.color, framing: shot.framing, prompt: shot.prompt, file, passed, attempts })),
     image_cost_usd: Number(imageCost.toFixed(3)),
     batch: BATCH,
+    recolor,
   };
   await writeFile(path.join(dir, "qa.json"), JSON.stringify(summary, null, 2));
   return summary;
+}
+
+// Experimento de recoloreado: una máscara por foto del color generado y un teñido por cada color extra.
+async function recolorShots(shotList: ShotList, results: ShotResult[], design: ImageInput, dir: string, log: (m: string) => void) {
+  const base = shotList.colors[0];
+  const targets = recolorArg
+    ? recolorArg.split(",").map((name) => {
+        const c = palette.find((p) => p.name.toLowerCase() === name.trim().toLowerCase());
+        if (!c) throw new Error(`--recolor: el color "${name}" no está en config/garment-colors.json`);
+        return c;
+      })
+    : palette.filter((c) => c.name !== base.name).sort((a, b) => deltaE(b.hex, base.hex) - deltaE(a.hex, base.hex)).slice(0, 2);
+  if (rgbToLab(hexToRgb(base.hex))[0] < 55) log(`  Aviso: la base ${base.name} es oscura; el teñido sale mejor desde un hoodie claro`);
+  log(`Recoloreado: de ${base.name} a ${targets.map((c) => c.name).join(", ")}…`);
+  await mkdir(path.join(dir, "mockups", "recolor"), { recursive: true });
+  const { model, imageSize } = QUALITY[QUALITY_NAME];
+  let cost = 0;
+  const shots = [];
+  for (const src of results.filter((r) => r.shot.color === base.name)) {
+    if (!src.file) continue;
+    const photo = await readFile(path.join(dir, src.file));
+    let mask: Buffer;
+    try {
+      const m = await garmentMask(gemini, photo, model, imageSize);
+      cost += m.cost_usd;
+      mask = m.data;
+      await writeFile(path.join(dir, "mockups", "recolor", `${src.shot.shot_id}-mask.png`), await sharp(mask).png().toBuffer());
+    } catch (err) {
+      log(`  máscara de ${src.shot.shot_id} falló: ${err instanceof Error ? err.message : String(err)}`);
+      continue;
+    }
+    for (const color of targets) {
+      const data = await recolorGarment(photo, mask, base.hex, color.hex);
+      const file = `mockups/recolor/${src.shot.shot_id}-${color.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.jpg`;
+      await writeFile(path.join(dir, file), data);
+      const shot = { ...src.shot, color: color.name };
+      const qa = await runQa({ claude, design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity: null, shot, garmentColor: color.name, size: shotList.analysis.embroidery_size_cm });
+      log(`  ${src.shot.shot_id} → ${color.name} (teñida): ${qa.passed ? "OK" : "NO PASA"} (bordado ${qa.embroidery_fidelity}/10, realismo ${qa.realism}/10)`);
+      shots.push({ from: src.shot.shot_id, color: color.name, file, qa });
+    }
+  }
+  return { base: base.name, cost_usd: Number(cost.toFixed(3)), shots };
 }

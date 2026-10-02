@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attributeOfValues, buildProductPayload, colorAttribute, resolveColors, runPublisher, runTag } from "../src/agents/publisher.js";
+import { attributeOfValues, buildProductPayload, colorAttribute, resolveColors, runPublisher, runTag, variantSku } from "../src/agents/publisher.js";
 import type { ProductBrief, ProductListing } from "../src/contracts/index.js";
 import { XdopeApi, type ApiAttribute } from "../src/store/xdope.js";
 
@@ -21,6 +21,7 @@ const brief: ProductBrief = {
   slug: "hoodie-calcifer-bordado",
   category_ids: ["cat-hoodies", "cat-anime"],
   design_id: "d_abc",
+  design_number: "207",
   embroidery_placement: "chest_left",
   garment: { type: "hoodie", material: "algodón" },
   colors: [
@@ -60,8 +61,9 @@ describe("buildProductPayload", () => {
     expect(p.variations).toHaveLength(6);
     expect(p.variations[0]).toMatchObject({ name: "M/Negro", attribute_value_ids: ["c-negro", "s-m"], price: 120000, variation_images: ["i1", "i2", "i3"] });
     expect(new Set(p.variations.map((v) => v.sku)).size).toBe(6);
-    expect(p.variations[0].sku).toBe("hoodie-calcifer-bordado_M/Negro");
+    expect(p.variations[0].sku).toBe("207_hoodie-calcifer-bordado_M/Negro");
     expect(buildProductPayload({ runId: "r1", brief, listing, imagesByColor, colorAttr, sizeAttr, taxId: null, descriptionTemplate: "<div>marca</div>" }).description).toBe("<div>marca</div>");
+    expect(p.tags).toContain("diseno-207");
     expect(p.product_images).toEqual(["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9"]);
     expect(p.product_thumbnail_id).toBe("i1");
     expect(p.tags).toContain(runTag("r1"));
@@ -133,5 +135,12 @@ describe("runPublisher", () => {
   it("no toca un producto con el mismo slug que no es del lote", async () => {
     const { api } = fakeApi({ _id: "otro", status: 1, tags: [] });
     await expect(publish(api)).rejects.toThrow("no es de este lote");
+  });
+});
+
+describe("variantSku", () => {
+  it("pone el número del diseño antes del formato de la tienda", () => {
+    expect(variantSku({ slug: "hoodie-dragon", design_number: "207" }, "Verde Oliva", "XL")).toBe("207_hoodie-dragon_XL/Verde Oliva");
+    expect(variantSku({ slug: "hoodie-dragon", design_number: null }, "Negro", "S")).toBe("hoodie-dragon_S/Negro");
   });
 });

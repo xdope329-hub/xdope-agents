@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rename, rm, writeFile, readdir } from "node:fs/promises
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { readCatalog, scanDesigns, writeCatalog } from "../src/designs/library.js";
+import { designNumber, readCatalog, scanDesigns, writeCatalog } from "../src/designs/library.js";
 
 let dir: string;
 let tick = 0;
@@ -93,5 +93,13 @@ describe("scanDesigns", () => {
     expect(await readCatalog(file)).toEqual(r.catalog);
     await rm(file);
     expect(await readCatalog(file)).toEqual([]);
+  });
+});
+
+describe("designNumber", () => {
+  it("toma el número al inicio del nombre de la foto", () => {
+    expect(designNumber("1. JUST PHOTOS of all designs/207.jpg")).toBe("207");
+    expect(designNumber("NUEVOS/0207 dragon.png")).toBe("207");
+    expect(designNumber("Calcifer.jpg")).toBeNull();
   });
 });
