@@ -21,7 +21,8 @@
     "gui": "tsx --env-file-if-exists=.env src/cli/gui.ts",
     "pipeline:cjs": "node src/pipeline.cjs",
     "schedule:install:cjs": "node src/scheduler/install.cjs",
-    "schedule:remove:cjs": "node src/scheduler/install.cjs --remove"
+    "schedule:remove:cjs": "node src/scheduler/install.cjs --remove",
+    "recolor": "tsx --env-file-if-exists=.env src/cli/recolor.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.130.0",
