@@ -168,7 +168,8 @@ async function processRun(runId: string, log: (m: string) => void) {
     log(`Reintentando desde ${state.error?.step}`);
     state = await store.reopen(runId);
   }
-  if (state.status === "inactive_created" || state.status === "live") return log(`Ya publicado (${state.status})`);
+  // Un producto ya creado solo se vuelve a publicar (actualizar) si se pide --publish, p. ej. para sumar colores teñidos.
+  if ((state.status === "inactive_created" || state.status === "live") && !PUBLISH) return log(`Ya publicado (${state.status})`);
   const dir = store.runDir(runId);
   const design: ImageInput = { data: await readFile(store.file(runId, "design.jpg")), mediaType: "image/jpeg", label: "" };
   const source = JSON.parse(await readFile(store.file(runId, "source.json"), "utf8"));
@@ -260,17 +261,34 @@ async function processRun(runId: string, log: (m: string) => void) {
   if (!brief) {
     brief = await store.writeArtifact(runId, "brief.json", ProductBrief, await buildBrief(runId, curator, shotList, colors, colorAttr, source.design_number ?? designNumber(source.photo)));
   }
+  // Colores teñidos sin IA que Diego eligió publicar (extra-colors.json): variantes extra con sus fotos teñidas.
+  const extra = (await exists(store.file(runId, "extra-colors.json"))) ? (JSON.parse(await readFile(store.file(runId, "extra-colors.json"), "utf8")).colors as string[]) : [];
+  const extraImages = [];
+  for (const color of extra) {
+    for (const r of approved) {
+      const file = path.join(dir, "mockups", "recolor", `${r.shot.shot_id}-${slug(color)}.jpg`);
+      if (!(await exists(file))) throw new Error(`Falta la foto teñida ${r.shot.shot_id} en ${color}: vuelve a recolorear el lote con ese color`);
+      extraImages.push({ color, filename: `${brief.slug}-${r.shot.shot_id}-${slug(color)}.jpg`, data: await readFile(file) });
+    }
+  }
+  const missingColors = extra.filter((c) => !brief!.colors.some((x) => x.name === c));
+  if (missingColors.length) {
+    const added = resolveColors(colorAttr, missingColors).map((c) => ({ ...c, hex: palette.find((p) => p.name === c.name)?.hex ?? "#000000" }));
+    brief = await store.writeArtifact(runId, "brief.json", ProductBrief, { ...brief, colors: [...brief.colors, ...added] });
+    log(`Colores teñidos que se publican: ${missingColors.join(", ")}`);
+  }
   if (state.status === "qa") state = await store.transition(runId, "publishing");
-  const images = await Promise.all(
-    approved.map(async (r) => ({ color: r.shot.color, filename: `${brief!.slug}-${r.shot.shot_id}.jpg`, data: await readFile(path.join(dir, r.file!)) })),
-  );
+  const images = [
+    ...(await Promise.all(approved.map(async (r) => ({ color: r.shot.color, filename: `${brief!.slug}-${r.shot.shot_id}.jpg`, data: await readFile(path.join(dir, r.file!)) })))),
+    ...extraImages,
+  ];
   const result = await runPublisher({
     api: api!, runId, environment: env.XDOPE_API_ENV === "prod" ? "prod" : "qa", adminUrl: env.XDOPE_ADMIN_URL!,
     brief, listing, images, colorAttr, sizeAttr, taxId: defaults!.tax_id, sizeChartImageId: defaults!.size_chart_image_id,
     descriptionTemplate: (await exists(DESCRIPTION_TEMPLATE)) ? await readFile(DESCRIPTION_TEMPLATE, "utf8") : undefined, log,
   });
   await store.writeArtifact(runId, "publish.json", PublishResult, result);
-  await store.transition(runId, "inactive_created");
+  if (state.status === "publishing") await store.transition(runId, "inactive_created");
   await markPublished(brief.design_id, result.product_id);
   log(`Producto inactivo creado: ${result.admin_url}`);
 }

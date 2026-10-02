@@ -103,6 +103,7 @@ async function runsSummary() {
       has_review: await exists(path.join(dir, "review.html")),
       has_photos: await exists(path.join(dir, "mockups", "progress.json")),
       has_recolor: await exists(path.join(dir, "recolor.html")),
+      extra_colors: (await readJson(path.join(dir, "extra-colors.json")))?.colors ?? [],
       base_color: (await readJson(path.join(dir, "shots.json")))?.colors?.[0]?.name ?? null,
       admin_url: publish?.admin_url ?? null,
     });
@@ -179,6 +180,10 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/") return send(res, 200, PAGE, "text/html; charset=utf-8");
     if (req.method === "GET" && url.pathname === "/api/runs") return send(res, 200, { runs: await runsSummary(), job: running() ?? jobs.at(-1) ?? null });
     if (req.method === "GET" && url.pathname === "/api/job") return send(res, 200, running() ?? jobs.at(-1) ?? null);
+    if (req.method === "POST" && url.pathname === "/api/extra-colors") {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      return send(res, 200, await saveExtraColors(String(body.run_id ?? ""), Array.isArray(body.colors) ? body.colors.map(String) : []));
+    }
     if (req.method === "GET" && url.pathname === "/api/palette") return send(res, 200, JSON.parse(await readFile("config/garment-colors.json", "utf8")));
     if (req.method === "GET" && url.pathname === "/api/placement-refs") {
       const files = (await exists(PLACEMENT_REFS)) ? await readdir(PLACEMENT_REFS) : [];
@@ -213,6 +218,18 @@ const server = createServer(async (req, res) => {
 });
 
 type Box = { ref: string; x: number; y: number; w: number; h: number };
+
+// Colores teñidos que se publicarán: solo los que ya tienen vista previa en recolor.json.
+async function saveExtraColors(runId: string, colors: string[]) {
+  const file = store.file(runId, "extra-colors.json");
+  const recolor = await readJson(store.file(runId, "recolor.json"));
+  if (!recolor) throw new Error("Primero recolorea el lote");
+  const available = new Set<string>(recolor.rows.flatMap((r: { versions: Array<{ color: string }> }) => r.versions.map((v) => v.color)));
+  const bad = colors.filter((c) => !available.has(c));
+  if (bad.length) throw new Error(`Sin vista previa para: ${bad.join(", ")}`);
+  await writeFile(file, JSON.stringify({ colors, chosen_at: new Date().toISOString() }, null, 2) + "\n");
+  return { colors };
+}
 
 function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean; design_ids?: string[]; placement_box?: Box | null; colors?: string[] }): string[] {
   const runId = (id?: string) => {
@@ -353,6 +370,15 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
     <div class="bar" style="margin:0"><button class="primary" id="rgo">Recolorear</button><button id="rclose">Cerrar</button></div>
   </div>
 </div>
+<div id="emodal" hidden style="position:fixed;inset:0;background:#0009;z-index:10;display:flex;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:720px;width:100%;max-height:95vh;overflow:auto;margin:0">
+    <b>Colores teñidos a publicar</b>
+    <p class="muted" id="einfo"></p>
+    <div id="ecolors" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin:8px 0"></div>
+    <p class="muted">Cada color elegido se publica como variante extra con sus fotos teñidas (todas las tallas). Si el producto ya está en la tienda, usa luego "Actualizar en la tienda".</p>
+    <div class="bar" style="margin:0"><button class="primary" id="esave">Guardar</button><button id="eclose">Cerrar</button></div>
+  </div>
+</div>
 <div class="card"><div class="muted" id="jobtitle">Sin acciones en curso</div><pre id="log"></pre></div>
 </main>
 <script>
@@ -391,6 +417,8 @@ async function load() {
     else if (!["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="resume" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar" : "Continuar") + "</button>");
     if (r.has_photos && r.base_color) acts.push('<button data-act="recolor" data-run="' + esc(r.run_id) + '" data-base="' + esc(r.base_color) + '">Recolorear (preview)</button>');
     if (r.has_recolor) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/recolor.html" target="_blank"><button>Ver recoloreado</button></a>');
+    if (r.has_recolor) acts.push('<button data-act="extra" data-run="' + esc(r.run_id) + '">Colores a publicar' + (r.extra_colors.length ? " (" + r.extra_colors.length + ")" : "") + "</button>");
+    if (r.extra_colors.length && ["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">Actualizar en la tienda</button>');
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
       "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
@@ -521,7 +549,28 @@ $("rgo").onclick = () => {
   act({ action: "recolor", run_id: recolorRun, colors });
 };
 
+let extraRun = null;
+async function openExtra(runId) {
+  const rec = await (await fetch("/runs/" + encodeURIComponent(runId) + "/recolor.json")).json();
+  const current = ((await api("/api/runs")).runs.find((x) => x.run_id === runId) || {}).extra_colors || [];
+  extraRun = runId;
+  $("einfo").textContent = "Lote " + runId + " · color original: " + rec.base + " (siempre se publica)";
+  const byColor = new Map();
+  for (const row of rec.rows) for (const v of row.versions) if (!byColor.has(v.color)) byColor.set(v.color, v.file);
+  $("ecolors").innerHTML = [...byColor].map(([color, file]) =>
+    '<label class="dz' + (current.includes(color) ? " sel" : "") + '"><img src="/runs/' + encodeURIComponent(runId) + "/" + file + '?v=' + Date.now() + '"><input type="checkbox" value="' + esc(color) + '"' + (current.includes(color) ? " checked" : "") + '><div class="cap">' + esc(color) + "</div></label>").join("");
+  $("emodal").hidden = false;
+}
+$("ecolors").onchange = (e) => e.target.closest(".dz")?.classList.toggle("sel", e.target.checked);
+$("eclose").onclick = () => { $("emodal").hidden = true; };
+$("esave").onclick = async () => {
+  const colors = [...$("ecolors").querySelectorAll("input:checked")].map((i) => i.value);
+  try { await api("/api/extra-colors", { run_id: extraRun, colors }); $("emodal").hidden = true; msg(colors.length ? "Se publicarán también: " + colors.join(", ") : "Solo se publicará el color original"); await load(); }
+  catch (err) { msg(err.message, true); }
+};
+
 $("runs").onclick = (e) => { const b = e.target.closest("[data-act]"); if (!b) return;
+  if (b.dataset.act === "extra") return openExtra(b.dataset.run);
   if (b.dataset.act === "recolor") return openRecolor(b.dataset.run, b.dataset.base);
   if (b.dataset.act === "approve" && !confirm("¿Aprobar las fotos actuales de " + b.dataset.run + " por encima de QA? Revisa antes el review.")) return;
   if (b.dataset.act === "publish" && !confirm("¿Crear el producto INACTIVO en la tienda para " + b.dataset.run + "?")) return;
