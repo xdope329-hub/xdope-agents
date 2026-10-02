@@ -121,6 +121,11 @@ function designId(sha: string) {
   return `d_${sha.slice(0, 12)}`;
 }
 
+// Número del diseño tal como Diego lo tiene en el nombre de la foto: "207.jpg", "207 dragon.png" → "207".
+export function designNumber(file: string): string | null {
+  return path.basename(file, path.extname(file)).match(/^\s*0*(\d+)/)?.[1] ?? null;
+}
+
 function nameFrom(rel: string) {
   return path.basename(rel, path.extname(rel)).replace(/[_-]+/g, " ").trim();
 }

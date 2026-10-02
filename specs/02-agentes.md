@@ -134,6 +134,7 @@ El payload se basa en el test e2e `admin-dashboard/e2e/01-create-product-api.spe
 **Criterios de aceptación**
 - `status` = 0 al terminar; el producto no aparece en la tienda.
 - Variantes = colores × tallas del brief, cada una con precio, SKU único y las fotos de su color.
+- SKU de cada variante: `XD-<número del diseño>-<COLOR>-<TALLA>` (p. ej. `XD-207-NEGRO-M`). El número es el del nombre de la foto en la carpeta de bordados, para encontrar el diseño al bordar. Si la foto no tiene número se usa el `design_id`. El producto lleva además el tag `diseno-<número>`.
 - Imágenes en el orden de la `ShotList`; la primera es el thumbnail.
 - Una segunda corrida con el mismo `run_id` no crea un producto nuevo.
 - Corre contra QA mientras el Publicador no tenga 3 lotes correctos (constitución, regla 9).

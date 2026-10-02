@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { attributeOfValues, buildProductPayload, colorAttribute, resolveColors, runPublisher, runTag } from "../src/agents/publisher.js";
+import { attributeOfValues, buildProductPayload, colorAttribute, resolveColors, runPublisher, runTag, variantSku } from "../src/agents/publisher.js";
 import type { ProductBrief, ProductListing } from "../src/contracts/index.js";
 import { XdopeApi, type ApiAttribute } from "../src/store/xdope.js";
 
@@ -21,6 +21,7 @@ const brief: ProductBrief = {
   slug: "hoodie-calcifer-bordado",
   category_ids: ["cat-hoodies", "cat-anime"],
   design_id: "d_abc",
+  design_number: "207",
   embroidery_placement: "chest_left",
   garment: { type: "hoodie", material: "algodón" },
   colors: [
@@ -60,6 +61,8 @@ describe("buildProductPayload", () => {
     expect(p.variations).toHaveLength(6);
     expect(p.variations[0]).toMatchObject({ name: "Negro / M", attribute_value_ids: ["c-negro", "s-m"], price: 120000, variation_images: ["i1", "i2", "i3"] });
     expect(new Set(p.variations.map((v) => v.sku)).size).toBe(6);
+    expect(p.variations[0].sku).toBe("XD-207-NEGRO-M");
+    expect(p.tags).toContain("diseno-207");
     expect(p.product_images).toEqual(["i1", "i2", "i3", "i4", "i5", "i6", "i7", "i8", "i9"]);
     expect(p.product_thumbnail_id).toBe("i1");
     expect(p.tags).toContain(runTag("r1"));
@@ -131,5 +134,12 @@ describe("runPublisher", () => {
   it("no toca un producto con el mismo slug que no es del lote", async () => {
     const { api } = fakeApi({ _id: "otro", status: 1, tags: [] });
     await expect(publish(api)).rejects.toThrow("no es de este lote");
+  });
+});
+
+describe("variantSku", () => {
+  it("usa el número del diseño y, si no hay, el design_id", () => {
+    expect(variantSku({ design_id: "d_abc", design_number: "207" }, "Verde Oliva", "XL")).toBe("XD-207-VERDEOLIVA-XL");
+    expect(variantSku({ design_id: "d_abc", design_number: null }, "Negro", "S")).toBe("XD-D_ABC-NEGRO-S");
   });
 });

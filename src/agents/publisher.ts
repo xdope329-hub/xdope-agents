@@ -5,6 +5,12 @@ import type { ApiAttribute, XdopeApi } from "../store/xdope.js";
 
 export const runTag = (runId: string) => `agent-run:${runId}`;
 
+// SKU de variante: XD-<número del diseño>-<COLOR>-<TALLA>, p. ej. XD-207-NEGRO-M. Sin número, usa el design_id.
+export function variantSku(brief: Pick<ProductBrief, "design_id" | "design_number">, color: string, size: string) {
+  const part = (s: string) => norm(s).replace(/[^a-z0-9]+/g, "");
+  return `XD-${brief.design_number ?? brief.design_id}-${part(color)}-${part(size)}`.toUpperCase();
+}
+
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
 
 // Atributo de color de la tienda: el que se llama "Color" o, si no hay, el de estilo color.
@@ -63,7 +69,7 @@ export function buildProductPayload(opts: {
         price: brief.price.amount,
         sale_price: brief.price.sale_price,
         quantity: brief.stock_per_variant,
-        sku: `XD-${brief.design_id}-${norm(c.name).replace(/[^a-z0-9]+/g, "")}-${norm(sv.value).replace(/[^a-z0-9]+/g, "")}`.toUpperCase(),
+        sku: variantSku(brief, c.name, sv.value),
         stock_status: brief.stock_per_variant > 0 ? "in_stock" : "out_of_stock",
         status: 1,
         variation_images: opts.imagesByColor.get(c.name)!,
@@ -80,7 +86,7 @@ export function buildProductPayload(opts: {
     product_type: "physical",
     status: 0,
     categories: brief.category_ids,
-    tags: [...new Set([...listing.tags, runTag(opts.runId)])],
+    tags: [...new Set([...listing.tags, ...(brief.design_number ? [`diseno-${brief.design_number}`] : []), runTag(opts.runId)])],
     tax_id: opts.taxId,
     attributes_ids: [colorAttr.id, sizeAttr.id],
     product_thumbnail_id: images[0],

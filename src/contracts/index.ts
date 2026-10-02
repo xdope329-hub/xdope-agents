@@ -34,6 +34,8 @@ export const ProductBrief = z.object({
   slug: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
   category_ids: z.array(z.string()).min(1),
   design_id: z.string().min(1),
+  // Número del diseño en el nombre de la foto (p. ej. "207.jpg" → "207"); va en el SKU para encontrarlo al bordar.
+  design_number: z.string().regex(/^\d+$/).nullable().default(null),
   embroidery_placement: Placement,
   embroidery_size_cm: z.object({ w: z.number().positive(), h: z.number().positive() }).optional(),
   garment: z.object({
