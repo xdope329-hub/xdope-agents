@@ -1,32 +1,35 @@
-// Vista previa del recoloreado sin IA (specs/04): tiñe las fotos de un lote a los colores de la tienda
-// (config/garment-colors.json) y deja runs/<lote>/recolor.html para comparar. No publica nada.
-// Uso: npm run recolor -- <run_id> [--colors Negro,Beige]
-// La máscara de la tela se pide a Gemini una vez por foto y queda guardada; volver a correrlo no cuesta.
+// Vista previa del recoloreado sin IA (specs/04) para un lote ya generado: tiñe por código sus fotos finales a
+// otros colores de la tienda y deja runs/<run_id>/recolor.html para compararlas con la original.
+// Uso: npm run recolor -- <run_id> [--colors "Negro,Beige"]   (sin --colors: todos los demás colores de la tienda)
+// Costo: 1 máscara de Gemini por foto, solo la primera vez (se guarda y se reutiliza); el teñido es gratis.
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
 import type { GarmentColor } from "../agents/director.js";
-import { hexToRgb, rgbToLab } from "../color.js";
-import type { ShotList } from "../contracts/index.js";
+import { ShotList } from "../contracts/index.js";
 import { GeminiImages } from "../images/gemini.js";
-import { readProgress, type Attempt } from "../images/mockups.js";
 import { garmentMask, recolorGarment } from "../images/recolor.js";
 import { QUALITY, parseQuality } from "../quality.js";
 import { RunStore } from "../runs/store.js";
 
 const env = process.env;
 const args = process.argv.slice(2);
-const runId = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--colors");
-const colorsArg = args.includes("--colors") ? args[args.indexOf("--colors") + 1] : null;
-if (!runId) throw new Error("Uso: npm run recolor -- <run_id> [--colors Negro,Beige]");
+const runId = args.find((a) => !a.startsWith("--"));
+const colorsArg = args.includes("--colors") ? args[args.indexOf("--colors") + 1] : undefined;
+if (!runId) throw new Error("Uso: npm run recolor -- <run_id> [--colors A,B]");
 if (!env.GEMINI_API_KEY) throw new Error("Falta GEMINI_API_KEY");
 
 const store = new RunStore(env.RUNS_DIR ?? "runs");
 const dir = store.runDir(runId);
-const shotList: ShotList = JSON.parse(await readFile(path.join(dir, "shots.json"), "utf8"));
-const source = JSON.parse(await readFile(path.join(dir, "source.json"), "utf8"));
+const shotList = await store.readArtifact(runId, "shots.json", ShotList);
+if (!shotList) throw new Error(`El lote ${runId} aún no tiene plan de fotos`);
 const palette: GarmentColor[] = JSON.parse(await readFile("config/garment-colors.json", "utf8"));
-const base = shotList.colors[0];
+const source = JSON.parse(await readFile(store.file(runId, "source.json"), "utf8"));
+const { model, imageSize } = QUALITY[parseQuality(source.quality)];
+const gemini = new GeminiImages(env.GEMINI_API_KEY);
+
+const baseName = shotList.colors[0].name;
+const base = palette.find((c) => c.name === baseName) ?? shotList.colors[0];
 const targets = colorsArg
   ? colorsArg.split(",").map((name) => {
       const c = palette.find((p) => p.name.toLowerCase() === name.trim().toLowerCase());
@@ -34,85 +37,64 @@ const targets = colorsArg
       return c;
     })
   : palette.filter((c) => c.name !== base.name);
+const slug = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-const photos = await bestPhotos();
-if (!photos.length) throw new Error("Este lote todavía no tiene fotos generadas");
-
-const { model, imageSize } = QUALITY[parseQuality(source.quality)];
-const gemini = new GeminiImages(env.GEMINI_API_KEY);
-const outDir = path.join(dir, "mockups", "recolor");
-await mkdir(outDir, { recursive: true });
-let maskCost = 0;
-const rows: Array<{ color: GarmentColor; files: Array<string | null> }> = targets.map((color) => ({ color, files: [] }));
-
-console.log(`Recoloreado de ${runId}: de ${base.name} a ${targets.map((c) => c.name).join(", ")}`);
-if (rgbToLab(hexToRgb(base.hex))[0] < 55) console.log(`Aviso: ${base.name} es oscuro; el teñido sale mejor desde un hoodie claro`);
-for (const p of photos) {
-  const photo = await readFile(path.join(dir, p.file));
-  const maskFile = path.join(outDir, `${p.shot_id}-mask.png`);
-  let mask: Buffer | null = null;
-  if (await exists(maskFile)) mask = await readFile(maskFile);
-  else {
+await mkdir(path.join(dir, "mockups", "recolor"), { recursive: true });
+let cost = 0;
+const rows: Array<{ shot_id: string; original: string; versions: Array<{ color: string; hex: string; file: string }> }> = [];
+for (const shot of shotList.shots) {
+  const original = `mockups/${shot.shot_id}.jpg`;
+  if (!(await exists(path.join(dir, original)))) continue;
+  const photo = await readFile(path.join(dir, original));
+  const maskFile = path.join(dir, "mockups", "recolor", `${shot.shot_id}-mask.png`);
+  let mask: Buffer;
+  if (await exists(maskFile)) {
+    mask = await readFile(maskFile);
+  } else {
+    console.log(`Máscara de ${shot.shot_id}…`);
     try {
       const m = await garmentMask(gemini, photo, model, imageSize);
-      maskCost += m.cost_usd;
+      cost += m.cost_usd;
       mask = await sharp(m.data).png().toBuffer();
       await writeFile(maskFile, mask);
-      console.log(`  máscara de ${p.shot_id} lista (USD ${m.cost_usd.toFixed(3)})`);
     } catch (err) {
-      console.log(`  máscara de ${p.shot_id} falló: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-  for (const row of rows) {
-    if (!mask) {
-      row.files.push(null);
+      console.log(`  falló: ${err instanceof Error ? err.message : String(err)}`);
       continue;
     }
-    const file = `mockups/recolor/${p.shot_id}--${slug(row.color.name)}.jpg`;
-    await writeFile(path.join(dir, file), await recolorGarment(photo, mask, base.hex, row.color.hex));
-    row.files.push(file);
   }
+  const versions = [];
+  for (const color of targets) {
+    try {
+      const file = `mockups/recolor/${shot.shot_id}-${slug(color.name)}.jpg`;
+      await writeFile(path.join(dir, file), await recolorGarment(photo, mask, base.hex, color.hex));
+      versions.push({ color: color.name, hex: color.hex, file });
+    } catch (err) {
+      console.log(`  ${shot.shot_id} → ${color.name} falló: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  console.log(`  ${shot.shot_id}: ${versions.length} color(es)`);
+  rows.push({ shot_id: shot.shot_id, original, versions });
 }
+if (!rows.length) throw new Error("El lote no tiene fotos finales para recolorear");
 
-const previous = JSON.parse(await readFile(path.join(dir, "recolor.json"), "utf8").catch(() => "{}"));
-const totalMaskCost = Number(((previous.mask_cost_usd ?? 0) + maskCost).toFixed(3));
-await writeFile(path.join(dir, "recolor.json"), JSON.stringify({ base: base.name, mask_model: model, mask_cost_usd: totalMaskCost, photos, rows: rows.map((r) => ({ color: r.color.name, hex: r.color.hex, files: r.files })) }, null, 2) + "\n");
-await writeFile(path.join(dir, "recolor.html"), page(totalMaskCost));
-console.log(`Listo: ${path.join(dir, "recolor.html")} (máscaras: USD ${totalMaskCost.toFixed(3)} en total; los colores no cuestan)`);
+await writeFile(path.join(dir, "recolor.json"), JSON.stringify({ base: base.name, targets: targets.map((c) => c.name), mask_cost_usd: Number(cost.toFixed(3)), rows }, null, 2) + "\n");
+await writeFile(path.join(dir, "recolor.html"), page());
+console.log(`Listo: ${path.join(dir, "recolor.html")} | costo máscaras USD ${cost.toFixed(3)}`);
 
-// La mejor foto de cada toma: la final si el lote ya pasó QA, o el mejor intento hasta ahora.
-async function bestPhotos(): Promise<Array<{ shot_id: string; file: string }>> {
-  const qa = JSON.parse(await readFile(path.join(dir, "qa.json"), "utf8").catch(() => "null"));
-  if (qa) return qa.results.filter((r: { file: string | null }) => r.file).map((r: { shot: { shot_id: string }; file: string }) => ({ shot_id: r.shot.shot_id, file: r.file }));
-  const progress = await readProgress(dir);
-  const score = (a: Attempt) => (a.qa ? (a.qa.passed ? 100 : 0) + a.qa.embroidery_fidelity + a.qa.realism : 0);
-  return shotList.shots.flatMap((s) => {
-    const best = (progress?.attempts[s.shot_id] ?? []).filter((a) => a.candidate).sort((a, b) => score(b) - score(a))[0];
-    return best?.candidate ? [{ shot_id: s.shot_id, file: best.candidate }] : [];
-  });
-}
-
-function page(cost: number) {
-  const cell = (file: string | null) => (file ? `<img src="${file}" loading="lazy">` : `<div class="empty">sin máscara</div>`);
-  const row = (name: string, hex: string, files: Array<string | null>, note = "") =>
-    `<section><h2><span class="sw" style="background:${hex}"></span>${esc(name)}${note}</h2><div class="grid">${files.map(cell).join("")}</div></section>`;
+function page() {
+  const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+  const cell = (file: string, label: string, hex: string) =>
+    `<figure><img src="${esc(file)}?v=${Date.now()}" loading="lazy"><figcaption><span class="sw" style="background:${esc(hex)}"></span>${esc(label)}</figcaption></figure>`;
+  const body = rows
+    .map((r) => `<h2>${esc(r.shot_id)}</h2><div class="grid">${cell(r.original, `${base.name} (original)`, base.hex)}${r.versions.map((v) => cell(v.file, v.color, v.hex)).join("")}</div>`)
+    .join("\n");
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recoloreado ${esc(runId!)}</title>
-<style>:root{--bg:#fafafa;--fg:#111;--muted:#666}@media (prefers-color-scheme:dark){:root{--bg:#121212;--fg:#eee;--muted:#9a9a9a}}
-body{font-family:system-ui,sans-serif;margin:0 auto;max-width:1200px;padding:16px;background:var(--bg);color:var(--fg)}h2{font-size:16px;margin:24px 0 8px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:8px;display:block}
-.empty{aspect-ratio:4/5;display:grid;place-items:center;background:#8882;border-radius:8px}.sw{display:inline-block;width:16px;height:16px;border-radius:4px;border:1px solid #0003;vertical-align:-2px;margin-right:8px}.muted{color:var(--muted)}</style></head>
-<body><h1>Recoloreado sin IA</h1><p class="muted">Vista previa: las fotos de ${esc(base.name)} teñidas por código a los colores de la tienda. No se publicó nada. Máscaras: USD ${cost.toFixed(3)}; cada color extra no cuesta.</p>
-${row(base.name, base.hex, photos.map((p) => p.file), ' <span class="muted">(original generado)</span>')}
-${rows.map((r) => row(r.color.name, r.color.hex, r.files)).join("\n")}
-</body></html>`;
-}
-
-function slug(s: string) {
-  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
-
-function esc(s: string) {
-  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+<style>:root{--bg:#fafafa;--fg:#111;--card:#fff}@media (prefers-color-scheme:dark){:root{--bg:#121212;--fg:#eee;--card:#1c1c1c}}
+body{font-family:system-ui,sans-serif;margin:0 auto;max-width:1200px;padding:16px;background:var(--bg);color:var(--fg)}h2{font-size:16px;margin:28px 0 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}figure{margin:0;background:var(--card);border-radius:8px;overflow:hidden;box-shadow:0 1px 3px #0002}
+figure img{width:100%;display:block;aspect-ratio:4/5;object-fit:cover}figcaption{padding:6px 8px;font-size:13px}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #0003;vertical-align:middle;margin-right:6px}</style></head>
+<body><h1>Recoloreado sin IA · ${esc(runId!)}</h1><p>Vista previa: la tela se tiñe por código desde ${esc(base.name)}; el bordado, la piel y el fondo no se tocan. No se publica nada.</p>${body}</body></html>`;
 }
 
 async function exists(p: string) {

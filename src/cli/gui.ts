@@ -34,7 +34,10 @@ interface Job {
 const jobs: Job[] = [];
 const running = () => jobs.find((j) => j.finished_at === null) ?? null;
 
-function startJob(args: string[], script = "src/cli/pipeline.ts"): Job {
+// Acciones de recoloreado van a otro script; el resto al pipeline.
+function startJob(args: string[]): Job {
+  const script = args[0] === "recolor" ? "src/cli/recolor.ts" : "src/cli/pipeline.ts";
+  if (args[0] === "recolor") args = args.slice(1);
   if (running()) throw new Error("Ya hay una acción en curso; espera a que termine");
   const job: Job = { id: jobs.length + 1, args, started_at: new Date().toISOString(), finished_at: null, exit_code: null, log: [] };
   jobs.push(job);
@@ -98,8 +101,9 @@ async function runsSummary() {
       claude: await readJson(path.join(dir, "claude-usage.json")),
       has_listing: await exists(path.join(dir, "listing.json")),
       has_review: await exists(path.join(dir, "review.html")),
-      has_photos: !!qa || Object.values(progress?.attempts ?? {}).some((list) => list.some((a) => a.candidate)),
+      has_photos: await exists(path.join(dir, "mockups", "progress.json")),
       has_recolor: await exists(path.join(dir, "recolor.html")),
+      base_color: (await readJson(path.join(dir, "shots.json")))?.colors?.[0]?.name ?? null,
       admin_url: publish?.admin_url ?? null,
     });
   }
@@ -175,6 +179,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/") return send(res, 200, PAGE, "text/html; charset=utf-8");
     if (req.method === "GET" && url.pathname === "/api/runs") return send(res, 200, { runs: await runsSummary(), job: running() ?? jobs.at(-1) ?? null });
     if (req.method === "GET" && url.pathname === "/api/job") return send(res, 200, running() ?? jobs.at(-1) ?? null);
+    if (req.method === "GET" && url.pathname === "/api/palette") return send(res, 200, JSON.parse(await readFile("config/garment-colors.json", "utf8")));
     if (req.method === "GET" && url.pathname === "/api/placement-refs") {
       const files = (await exists(PLACEMENT_REFS)) ? await readdir(PLACEMENT_REFS) : [];
       return send(res, 200, files.filter((f) => f.endsWith(".jpg")).map((f) => f.slice(0, -4)));
@@ -191,10 +196,6 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/check-batches") return send(res, 200, await checkBatches());
     if (req.method === "POST" && url.pathname === "/api/action") {
       const body = JSON.parse((await readBody(req)) || "{}");
-      if (body.action === "recolor") {
-        if (!body.run_id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(body.run_id)) throw new Error("run_id inválido");
-        return send(res, 200, startJob([body.run_id], "src/cli/recolor.ts"));
-      }
       const args = actionArgs(body);
       return send(res, 200, startJob(args));
     }
@@ -213,7 +214,7 @@ const server = createServer(async (req, res) => {
 
 type Box = { ref: string; x: number; y: number; w: number; h: number };
 
-function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean; design_ids?: string[]; placement_box?: Box | null }): string[] {
+function actionArgs(body: { action?: string; run_id?: string; count?: number; batch?: boolean; quality?: string; review?: boolean; design_ids?: string[]; placement_box?: Box | null; colors?: string[] }): string[] {
   const runId = (id?: string) => {
     if (!id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(id)) throw new Error("run_id inválido");
     return id;
@@ -238,6 +239,11 @@ function actionArgs(body: { action?: string; run_id?: string; count?: number; ba
       return ["--approve", runId(body.run_id)];
     case "retry":
       return ["--retry", runId(body.run_id)];
+    case "recolor": {
+      const colors = (body.colors ?? []).map((c) => String(c));
+      if (colors.some((c) => !/^[\p{L}\p{N} _-]+$/u.test(c))) throw new Error("Color inválido");
+      return ["recolor", runId(body.run_id), ...(colors.length ? ["--colors", colors.join(",")] : [])];
+    }
     case "publish":
       return ["--resume", runId(body.run_id), "--publish"];
     default:
@@ -338,6 +344,15 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
     <div class="bar" style="margin:8px 0 0"><button class="primary" id="buse">Usar esta ubicación</button><button id="bclear">Quitar (automática)</button><button id="bclose">Cerrar</button></div>
   </div>
 </div>
+<div id="rmodal" hidden style="position:fixed;inset:0;background:#0009;z-index:10;display:flex;align-items:center;justify-content:center;padding:16px">
+  <div class="card" style="max-width:420px;width:100%;margin:0">
+    <b>Recolorear sin IA (vista previa)</b>
+    <p class="muted" id="rinfo"></p>
+    <div id="rcolors" style="display:grid;gap:6px;margin:8px 0"></div>
+    <p class="muted">Cuesta 1 máscara de Gemini por foto solo la primera vez (unos centavos); volver a teñir con otros colores es gratis. No publica nada.</p>
+    <div class="bar" style="margin:0"><button class="primary" id="rgo">Recolorear</button><button id="rclose">Cerrar</button></div>
+  </div>
+</div>
 <div class="card"><div class="muted" id="jobtitle">Sin acciones en curso</div><pre id="log"></pre></div>
 </main>
 <script>
@@ -362,8 +377,6 @@ async function load() {
     const b = r.batch ? esc(r.batch.stage || "") + ": " + esc(STATE[r.batch.state] || r.batch.state) + '<div class="muted">enviado hace ' + ago(r.batch.submitted_at) + (r.batch.checked_at ? ", revisado hace " + ago(r.batch.checked_at) : "") + "</div>" : '<span class="muted">—</span>';
     const acts = [];
     if (r.has_review) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/review.html" target="_blank"><button>Ver review</button></a>');
-    if (r.has_photos) acts.push('<button data-act="recolor" data-run="' + esc(r.run_id) + '" title="Tiñe las fotos a los colores de la tienda sin IA (solo una máscara por foto)">' + (r.has_recolor ? "Rehacer recoloreado" : "Recolorear sin IA") + "</button>");
-    if (r.has_recolor) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/recolor.html" target="_blank"><button>Ver colores</button></a>');
     // Con la ficha lista, lo único pendiente es publicar: un fallo ahí solo ofrece reintentar la publicación.
     const readyToPublish = r.has_listing && (["qa", "publishing"].includes(r.status) || (r.status === "failed" && ["qa", "publishing"].includes(r.error?.step)));
     const a = r.awaiting_review;
@@ -376,6 +389,8 @@ async function load() {
       // nada más: el lote espera la decisión
     } else if (readyToPublish) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar publicación" : "Publicar (inactivo)") + "</button>");
     else if (!["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="resume" data-run="' + esc(r.run_id) + '">' + (r.status === "failed" ? "Reintentar" : "Continuar") + "</button>");
+    if (r.has_photos && r.base_color) acts.push('<button data-act="recolor" data-run="' + esc(r.run_id) + '" data-base="' + esc(r.base_color) + '">Recolorear (preview)</button>');
+    if (r.has_recolor) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/recolor.html" target="_blank"><button>Ver recoloreado</button></a>');
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
       "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +
@@ -489,7 +504,25 @@ $("dprocess").onclick = async () => {
 
 $("new").onclick = () => act({ action: "new", count: Number($("count").value), batch: $("batch").checked, quality: $("quality").value, review: $("review").checked, placement_box: placementBox });
 $("refresh").onclick = () => load().catch((e) => msg(e.message, true));
+let recolorRun = null;
+async function openRecolor(runId, base) {
+  const palette = await api("/api/palette");
+  recolorRun = runId;
+  $("rinfo").textContent = "Lote " + runId + " · color base: " + base;
+  $("rcolors").innerHTML = palette.filter((c) => c.name !== base).map((c) =>
+    '<label><input type="checkbox" value="' + esc(c.name) + '" checked> <span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid #0003;background:' + esc(c.hex) + '"></span> ' + esc(c.name) + "</label>").join("");
+  $("rmodal").hidden = false;
+}
+$("rclose").onclick = () => { $("rmodal").hidden = true; };
+$("rgo").onclick = () => {
+  const colors = [...$("rcolors").querySelectorAll("input:checked")].map((i) => i.value);
+  if (!colors.length) return alert("Elige al menos un color");
+  $("rmodal").hidden = true;
+  act({ action: "recolor", run_id: recolorRun, colors });
+};
+
 $("runs").onclick = (e) => { const b = e.target.closest("[data-act]"); if (!b) return;
+  if (b.dataset.act === "recolor") return openRecolor(b.dataset.run, b.dataset.base);
   if (b.dataset.act === "approve" && !confirm("¿Aprobar las fotos actuales de " + b.dataset.run + " por encima de QA? Revisa antes el review.")) return;
   if (b.dataset.act === "publish" && !confirm("¿Crear el producto INACTIVO en la tienda para " + b.dataset.run + "?")) return;
   act({ action: b.dataset.act, run_id: b.dataset.run }); };
