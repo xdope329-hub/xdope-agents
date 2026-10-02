@@ -1,13 +1,14 @@
-// Generación de las fotos de un producto (Gemini) con QA y un reintento por foto.
+// Generación de las fotos de un producto (Gemini) con QA y un reintento por foto. QA revisa las fotos de cada etapa juntas.
 // Etapas: primera foto (fija a la persona modelo) → resto de fotos con esa identidad → reintentos de las que no pasan QA.
 // Con batch, cada etapa es un trabajo batch de Gemini (mitad de precio) y la función devuelve "waiting" hasta que termine;
 // el progreso queda en mockups/progress.json, así que se puede volver a llamar en otra corrida.
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { runQa, type QaResult } from "../agents/qa.js";
+import { createHash } from "node:crypto";
+import { runQaMany, type QaResult } from "../agents/qa.js";
 import type { MockupSet, Shot, ShotList } from "../contracts/index.js";
-import type { Claude, ImageInput } from "../llm/claude.js";
+import { ClaudePending, type Claude, type ImageInput } from "../llm/claude.js";
 import { imagePrice, type GeminiImages, type GeneratedImage, type ImageRequest, type ImageSize } from "./gemini.js";
 
 const CONCURRENCY = 3;
@@ -42,6 +43,7 @@ export interface Attempt {
   cost_usd: number;
   qa: QaResult | null;
   error?: string;
+  qa_pending?: boolean; // la foto ya existe y espera su revisión de QA
 }
 
 export interface ShotResult {
@@ -80,7 +82,7 @@ export interface AwaitingReview {
 
 export type MockupOutcome =
   | { kind: "done"; results: ShotResult[]; imageCost: number }
-  | { kind: "waiting"; job: string; state: string }
+  | { kind: "waiting"; job: string; state: string } // job: trabajo batch de Gemini o de Claude (QA)
   | { kind: "review"; results: ShotResult[]; imageCost: number; awaiting: AwaitingReview };
 
 export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> {
@@ -133,8 +135,8 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     };
   };
 
-  // Guarda la candidata, pasa QA y registra el intento.
-  const review = async (shot: Shot, model: string, img: GeneratedImage | Error) => {
+  // Guarda la candidata; QA la revisa después junto con las demás de su etapa (una sola llamada a Claude).
+  const addCandidate = async (shot: Shot, model: string, img: GeneratedImage | Error) => {
     const n = attemptsOf(shot).length + 1;
     if (img instanceof Error) {
       attemptsOf(shot).push({ model, candidate: null, cost_usd: 0, qa: null, error: img.message });
@@ -146,19 +148,43 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
     const candidate = `mockups/${shot.shot_id}/candidate_${n}.jpg`;
     await mkdir(path.join(o.dir, "mockups", shot.shot_id), { recursive: true });
     await writeFile(path.join(o.dir, candidate), data);
-    const id = shot === first ? null : await identity();
+    attemptsOf(shot).push({ model: img.batch ? `${model} (batch)` : model, candidate, cost_usd: img.cost_usd, qa: null, qa_pending: true });
+  };
+
+  // QA de todas las fotos pendientes en una llamada. Con Claude en batch puede quedar esperando (ClaudePending).
+  const reviewPending = async (): Promise<ClaudePending | null> => {
+    const pending = o.shotList.shots.flatMap((shot) => attemptsOf(shot).filter((a) => a.qa_pending).map((a) => ({ shot, a })));
+    if (!pending.length) return null;
+    const id = await identity();
+    const key = `qa-${createHash("sha1").update(pending.map((p) => p.a.candidate).join("|")).digest("hex").slice(0, 16)}`;
     try {
-      const qa = await runQa({ claude: o.claude, design: o.design, candidate: { data, mediaType: "image/jpeg", label: "" }, identity: id, shot, garmentColor: shot.color, size: o.shotList.analysis.embroidery_size_cm, placementGuide: o.placementGuide });
-      attemptsOf(shot).push({ model: img.batch ? `${model} (batch)` : model, candidate, cost_usd: img.cost_usd, qa });
-      o.log(`  ${shot.shot_id}: ${qa.passed ? "OK" : "NO PASA"} (bordado ${qa.embroidery_fidelity}/10, realismo ${qa.realism}/10)`);
+      const reviews = await runQaMany({
+        claude: o.claude,
+        design: o.design,
+        identity: id,
+        candidates: await Promise.all(
+          pending.map(async ({ shot, a }) => ({ candidate: { data: await readFile(path.join(o.dir, a.candidate!)), mediaType: "image/jpeg" as const, label: "" }, shot, garmentColor: shot.color, checkPerson: shot !== first })),
+        ),
+        size: o.shotList.analysis.embroidery_size_cm,
+        placementGuide: o.placementGuide,
+        key,
+      });
+      pending.forEach(({ shot, a }, i) => {
+        a.qa = reviews[i];
+        o.log(`  ${shot.shot_id}: ${a.qa.passed ? "OK" : "NO PASA"} (bordado ${a.qa.embroidery_fidelity}/10, realismo ${a.qa.realism}/10)`);
+      });
     } catch (err) {
-      attemptsOf(shot).push({ model, candidate, cost_usd: img.cost_usd, qa: null, error: `QA falló: ${err instanceof Error ? err.message : String(err)}` });
+      if (err instanceof ClaudePending) return err;
+      for (const { a } of pending) a.error = `QA falló: ${err instanceof Error ? err.message : String(err)}`;
     }
+    for (const { a } of pending) delete a.qa_pending;
     // La mejor foto de la primera toma es la referencia de identidad para las demás.
-    if (shot === first) {
+    if (pending.some((p) => p.shot === first)) {
       const best = bestAttempt(attemptsOf(first));
       if (best?.candidate) await writeFile(identityFile, await faceCrop(path.join(o.dir, best.candidate)));
     }
+    await save();
+    return null;
   };
 
   // Siguiente etapa pendiente, una pausa para que Diego revise, o null si ya no queda nada por generar.
@@ -216,10 +242,18 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
       o.log(`Batch de ${b.stage} ${check.results ? "terminado" : `terminó en ${check.state}`}; revisando fotos…`);
       for (const key of b.keys) {
         const shot = o.shotList.shots.find((s) => s.shot_id === key);
-        if (shot) await review(shot, b.model, check.results?.get(key) ?? new Error(`Batch ${check.state}: ${check.error ?? "sin detalle"}`));
+        if (shot) await addCandidate(shot, b.model, check.results?.get(key) ?? new Error(`Batch ${check.state}: ${check.error ?? "sin detalle"}`));
       }
       progress.batch = null;
       await save();
+      continue;
+    }
+
+    const waitingQa = await reviewPending();
+    if (waitingQa) {
+      if (!o.waitForBatch) return { kind: "waiting", job: waitingQa.batchId, state: `QA ${waitingQa.state}` };
+      o.log(`  QA en batch (${waitingQa.state}); vuelvo a revisar en 60 s`);
+      await new Promise((r) => setTimeout(r, 60_000));
       continue;
     }
 
@@ -246,7 +280,7 @@ export async function generateMockups(o: MockupOptions): Promise<MockupOutcome> 
       await Promise.all(
         next.shots.slice(i, i + CONCURRENCY).map(async (s) => {
           const img = await o.gemini.generate(await request(s, next.model)).catch((err: unknown) => (err instanceof Error ? err : new Error(String(err))));
-          await review(s, next.model, img);
+          await addCandidate(s, next.model, img);
         }),
       );
     }

@@ -50,6 +50,8 @@ Nada bloquea: cada acción corre `pipeline` como proceso aparte y el panel muest
 ```bash
 npm run pipeline -- --designs 1 --quality baja       # nuevo lote; envía el batch y termina (--realtime para no usar batch)
 npm run pipeline -- --collect                        # recoge batches terminados y sigue los lotes en curso
+# Claude (Curador, Director, QA, Copywriter) también va en batch: cada paso espera a la siguiente recogida.
+# Para todo al momento (más caro): --realtime, o CLAUDE_USE_BATCH=false en .env
 npm run pipeline -- --design d_3f9a1c                # un diseño del catálogo (o una ruta a una foto)
 npm run pipeline -- --resume <run_id> --publish      # crea el producto INACTIVO en XDOPE_API_URL
 npm run pipeline -- --status                         # en qué paso va cada lote

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ShotList } from "../src/contracts/index.js";
 import type { GeminiImages, GeneratedImage } from "../src/images/gemini.js";
 import { decide, generateMockups, readProgress, type MockupOptions } from "../src/images/mockups.js";
-import type { Claude } from "../src/llm/claude.js";
+import { ClaudePending, type Claude } from "../src/llm/claude.js";
 
 let dir: string;
 beforeEach(async () => {
@@ -29,9 +29,16 @@ const shotList: ShotList = {
 };
 const qaOk = { embroidery_fidelity: 9, realism: 9, same_person: true, framing_ok: true, garment_present: true, placement_ok: true, size_ok: true, stitch_texture_visible: true, garment_color_ok: true, extra_text: false, reasons: [] };
 // QA falla las primeras `failures` revisiones y después aprueba.
+// QA revisa varias fotos por llamada: devuelve una revisión por cada "Foto candidata".
 const fakeClaude = (failures = 0) => {
   let n = 0;
-  return { ask: async () => (n++ < failures ? { ...qaOk, embroidery_fidelity: 5, reasons: ["gafas deformadas"] } : qaOk) } as unknown as Claude;
+  return {
+    ask: async (o: { images: Array<{ label: string }> }) => ({
+      reviews: o.images
+        .filter((i) => i.label.startsWith("Foto candidata"))
+        .map((_, i) => ({ ...(n++ < failures ? { ...qaOk, embroidery_fidelity: 5, reasons: ["gafas deformadas"] } : qaOk), photo: i + 1 })),
+    }),
+  } as unknown as Claude;
 };
 
 function fakeGemini(batchState: { value: string }) {
@@ -136,5 +143,30 @@ describe("generateMockups", () => {
     // Las tomas que no son frontales no reciben la guía (con persona de frente), para no copiar la postura.
     const rest = await generateMockups({ ...options(gemini), shotList: withPreset, placementRefsDir: refs });
     expect(rest.kind).toBe("waiting");
+  });
+
+  it("con QA en batch de Claude espera su respuesta y revisa las 2 fotos restantes en una sola llamada", async () => {
+    const { gemini, calls } = fakeGemini({ value: "JOB_STATE_SUCCEEDED" });
+    const ready = { value: false };
+    const qaCalls: number[] = [];
+    const base = fakeClaude();
+    const claude = {
+      ask: async (o: { images: Array<{ label: string }>; key?: string }) => {
+        if (!ready.value) throw new ClaudePending(o.key ?? "", "msgbatch_1", "in_progress");
+        qaCalls.push(o.images.filter((i) => i.label.startsWith("Foto candidata")).length);
+        return (base as unknown as { ask: (x: unknown) => Promise<unknown> }).ask(o);
+      },
+    } as unknown as Claude;
+
+    // Primera foto lista, su QA queda esperando el batch de Claude.
+    expect(await generateMockups(options(gemini, claude))).toEqual({ kind: "waiting", job: "msgbatch_1", state: "QA in_progress" });
+    expect(await generateMockups(options(gemini, claude))).toEqual({ kind: "waiting", job: "msgbatch_1", state: "QA in_progress" });
+    expect(calls.submit).toHaveLength(1);
+
+    ready.value = true;
+    const done = await generateMockups(options(gemini, claude));
+    if (done.kind !== "done") throw new Error("debía terminar");
+    expect(qaCalls).toEqual([1, 2]);
+    expect(done.results.every((r) => r.passed)).toBe(true);
   });
 });

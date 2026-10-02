@@ -49,7 +49,7 @@ export async function runCopywriter(opts: {
 
   let feedback = "";
   for (let attempt = 1; attempt <= 2; attempt++) {
-    const out = await opts.claude.ask({ system: SYSTEM, images: [], prompt: `${prompt}\n\nEscribe la ficha.${feedback}`, schema: CopyOutput, effort: "low" });
+    const out = await opts.claude.ask({ system: SYSTEM, images: [], prompt: `${prompt}\n\nEscribe la ficha.${feedback}`, schema: CopyOutput, effort: "low", key: `copywriter-${attempt}` });
     const alts = Object.fromEntries(out.image_alts.map((a) => [a.shot_id, a.alt]));
     const missing = opts.shots.filter((s) => !alts[s.shot_id]).map((s) => s.shot_id);
     const parsed = ProductListing.safeParse({

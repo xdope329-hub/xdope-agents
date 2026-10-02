@@ -10,6 +10,7 @@ import { readCatalog } from "../designs/library.js";
 import { readdir } from "node:fs/promises";
 import { GeminiImages } from "../images/gemini.js";
 import { readProgress } from "../images/mockups.js";
+import { claudeBatchState, pendingClaudeBatches } from "../llm/claude.js";
 import { parseQuality } from "../quality.js";
 import { RunStore } from "../runs/store.js";
 
@@ -78,6 +79,9 @@ async function runsSummary() {
     const publish = await readJson(path.join(dir, "publish.json"));
     const progress = await readProgress(dir);
     const source = await readJson(path.join(dir, "source.json"));
+    // Batch de Claude (Curador, Director, QA o Copywriter) esperando respuesta; se muestra como un batch más.
+    const claudeBatch = (await pendingClaudeBatches(path.join(dir, "claude")))[0];
+    const geminiBatch = qa ? null : (progress?.batch ?? null);
     out.push({
       run_id: r.run_id,
       design_id: r.design_id,
@@ -86,7 +90,7 @@ async function runsSummary() {
       updated_at: r.history.at(-1)?.at ?? null,
       title: curator?.title ?? null,
       quality: source?.quality ?? "media",
-      batch: qa ? null : (progress?.batch ?? null),
+      batch: geminiBatch ?? (claudeBatch ? { job: claudeBatch.batch_id, model: "claude", stage: `Claude ${claudeBatch.key}`, state: claudeBatch.state, submitted_at: claudeBatch.submitted_at, checked_at: null, claude: true } : null),
       awaiting_review: qa ? null : (progress?.awaiting_review ?? null),
       has_progress: !!progress,
       approved: qa ? `${qa.results.filter((x: { passed: boolean }) => x.passed).length}/${qa.results.length}` : null,
@@ -137,6 +141,11 @@ async function checkBatches() {
   const states = [];
   for (const r of pending) {
     try {
+      if ("claude" in r.batch!) {
+        const state = await claudeBatchState(r.batch!.job);
+        states.push({ run_id: r.run_id, job: r.batch!.job, state, done: state === "ended", error: null });
+        continue;
+      }
       const check = await gemini.checkBatch(r.batch!.job, [], r.batch!.model);
       states.push({ run_id: r.run_id, job: r.batch!.job, state: check.state, done: check.done, error: check.error ?? null });
     } catch (err) {
@@ -329,7 +338,7 @@ input[type=search]{font:inherit;padding:6px 10px;border-radius:8px;border:1px so
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const ago = (iso) => { if (!iso) return ""; const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 60 ? m + " min" : Math.round(m / 60) + " h"; };
-const STATE = { JOB_STATE_PENDING: "en cola", JOB_STATE_RUNNING: "procesando", JOB_STATE_SUCCEEDED: "terminado", JOB_STATE_FAILED: "falló", JOB_STATE_CANCELLED: "cancelado", JOB_STATE_EXPIRED: "expiró" };
+const STATE = { in_progress: "en proceso", canceling: "cancelando", ended: "terminado", JOB_STATE_PENDING: "en cola", JOB_STATE_RUNNING: "procesando", JOB_STATE_SUCCEEDED: "terminado", JOB_STATE_FAILED: "falló", JOB_STATE_CANCELLED: "cancelado", JOB_STATE_EXPIRED: "expiró" };
 let busy = false;
 
 async function api(url, body) {

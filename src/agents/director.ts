@@ -97,7 +97,9 @@ export async function runDirector(opts: {
       images: [{ ...opts.design, label: "Foto del bordado (referencia del diseño):" }],
       prompt: `Producto: ${opts.title}\nColores de hoodie disponibles:\n${list}\n\nDiseña el concepto, el color, el tamaño estándar del bordado y las tomas.${feedback}`,
       schema: DirectorOutput,
-      effort: "high",
+      // medium en vez de high para bajar costo (Diego, 2026-10-02).
+      effort: "medium",
+      key: `director-${attempt}`,
     });
     const palette = out.analysis.thread_palette.filter((h) => /^#[0-9a-f]{6}$/i.test(h)).slice(0, 12);
     const byName = new Map(opts.palette.map((c) => [c.name.toLowerCase(), c]));

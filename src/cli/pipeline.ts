@@ -27,7 +27,7 @@ import { CuratorPick, Defaults, MIN_COLORS, MockupSet, ProductBrief, ProductList
 import { designNumber, readCatalog, writeCatalog } from "../designs/library.js";
 import { GeminiImages } from "../images/gemini.js";
 import { approvedColors, decide, generateMockups, readProgress, toMockupSet, type ShotResult } from "../images/mockups.js";
-import { Claude, type ImageInput } from "../llm/claude.js";
+import { Claude, ClaudePending, pendingClaudeBatches, type ImageInput } from "../llm/claude.js";
 import { renderReview } from "../review.js";
 import { QUALITY, parseQuality } from "../quality.js";
 import { boxPlacement, guideImage, parseBox, type PlacementBox } from "../images/guide.js";
@@ -46,6 +46,8 @@ const list = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Bo
 const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
 const BATCH = !flag("realtime") && env.IMAGE_USE_BATCH !== "false";
+// Claude también en batch (mitad de precio) salvo --realtime o CLAUDE_USE_BATCH=false (Diego, 2026-10-02).
+const CLAUDE_BATCH = !flag("realtime") && env.CLAUDE_USE_BATCH !== "false";
 const QUALITY_ARG = parseQuality(opt("quality") ?? env.IMAGE_QUALITY);
 const BOX_ARG = opt("box") ? parseBox(opt("box")!) : null;
 const PLACEMENT_REFS = env.PLACEMENT_REFS_DIR ?? "config/placement-refs";
@@ -66,7 +68,7 @@ if (flag("status")) {
 for (const k of ["ANTHROPIC_API_KEY", "GEMINI_API_KEY"]) if (!env[k]) throw new Error(`Falta ${k}`);
 if (PUBLISH) for (const k of ["XDOPE_API_URL", "XDOPE_AGENT_EMAIL", "XDOPE_AGENT_PASSWORD", "XDOPE_ADMIN_URL"]) if (!env[k]) throw new Error(`Falta ${k} para --publish`);
 
-const claude = new Claude();
+const globalClaude = new Claude();
 const gemini = new GeminiImages(env.GEMINI_API_KEY!);
 const palette: GarmentColor[] = JSON.parse(await readFile("config/garment-colors.json", "utf8"));
 const defaults = (await exists(DEFAULTS_FILE)) ? Defaults.parse(JSON.parse(await readFile(DEFAULTS_FILE, "utf8"))) : null;
@@ -92,7 +94,11 @@ const runIds = [...list(opt("resume"))];
 for (const id of list(opt("approve"))) runIds.push(await applyDecision(id, "approve"));
 for (const id of list(opt("retry"))) runIds.push(await applyDecision(id, "retry"));
 if (flag("collect")) {
-  for (const r of await store.list()) if (["design_ready", "shots_planned", "generating"].includes(r.status) && !runIds.includes(r.run_id)) runIds.push(r.run_id);
+  for (const r of await store.list()) {
+    if (runIds.includes(r.run_id) || r.status === "failed") continue;
+    const waitingClaude = (await pendingClaudeBatches(path.join(store.runDir(r.run_id), "claude"))).length > 0;
+    if (waitingClaude || ["curated", "design_ready", "shots_planned", "generating"].includes(r.status)) runIds.push(r.run_id);
+  }
 }
 for (const ref of list(opt("design"))) runIds.push(await createRun(ref, "elegido por Diego (--design)"));
 if (opt("designs")) {
@@ -113,12 +119,16 @@ for (const runId of runIds) {
   try {
     await processRun(runId, log);
   } catch (err) {
+    if (err instanceof ClaudePending) {
+      log(`Esperando a Claude en batch (${err.key}: ${err.state}); se recoge con --collect o con el botón de la GUI`);
+      continue;
+    }
     const message = err instanceof Error ? err.message : String(err);
     log(`FALLÓ: ${message}`);
     if ((await store.get(runId)).status !== "failed") await store.fail(runId, message);
   }
 }
-console.log(`Costo Claude: USD ${claude.usage.cost_usd.toFixed(2)}`);
+console.log(`Costo Claude: USD ${globalClaude.usage.cost_usd.toFixed(2)}`);
 
 // ── Lotes ───────────────────────────────────────────────────────────────────────────────────────
 
@@ -162,6 +172,8 @@ async function processRun(runId: string, log: (m: string) => void) {
   const dir = store.runDir(runId);
   const design: ImageInput = { data: await readFile(store.file(runId, "design.jpg")), mediaType: "image/jpeg", label: "" };
   const source = JSON.parse(await readFile(store.file(runId, "source.json"), "utf8"));
+  // Las llamadas a Claude de este lote van en batch y quedan guardadas en <lote>/claude/ hasta su respuesta.
+  const claude = (source.batch ?? BATCH) && CLAUDE_BATCH ? globalClaude.withBatch(path.join(dir, "claude")) : globalClaude;
 
   // 1. Curador
   let curator = await store.readArtifact(runId, "curator.json", CuratorPick);
@@ -363,17 +375,17 @@ async function applyDecision(runId: string, decision: "approve" | "retry"): Prom
 
 // Costo de Claude por agente, acumulado en runs/<run_id>/claude-usage.json (también entre corridas).
 async function track<T>(runId: string, agent: string, fn: () => Promise<T>): Promise<T> {
-  const before = { ...claude.usage };
+  const before = { ...globalClaude.usage };
   try {
     return await fn();
   } finally {
     const file = store.file(runId, "claude-usage.json");
-    const usage = (await exists(file)) ? JSON.parse(await readFile(file, "utf8")) : { model: claude.model, agents: {}, total_usd: 0 };
+    const usage = (await exists(file)) ? JSON.parse(await readFile(file, "utf8")) : { model: globalClaude.model, agents: {}, total_usd: 0 };
     const a = (usage.agents[agent] ??= { input_tokens: 0, output_tokens: 0, cost_usd: 0 });
-    a.input_tokens += claude.usage.input_tokens - before.input_tokens;
-    a.output_tokens += claude.usage.output_tokens - before.output_tokens;
-    a.cost_usd = Number((a.cost_usd + claude.usage.cost_usd - before.cost_usd).toFixed(4));
-    usage.model = claude.model;
+    a.input_tokens += globalClaude.usage.input_tokens - before.input_tokens;
+    a.output_tokens += globalClaude.usage.output_tokens - before.output_tokens;
+    a.cost_usd = Number((a.cost_usd + globalClaude.usage.cost_usd - before.cost_usd).toFixed(4));
+    usage.model = globalClaude.model;
     usage.total_usd = Number(Object.values(usage.agents as Record<string, { cost_usd: number }>).reduce((t, x) => t + x.cost_usd, 0).toFixed(4));
     await writeFile(file, JSON.stringify(usage, null, 2) + "\n");
   }

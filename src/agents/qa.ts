@@ -32,6 +32,56 @@ Bordados con marco (cuadrado, rectangular, circular u ovalado): son piezas peque
 Tamaño: sé estricto. Si el bordado se ve claramente más grande que lo pedido, size_ok es false aunque todo lo demás esté bien.
 Da motivos concretos y accionables (qué está mal y dónde), no generalidades.`;
 
+export interface QaCandidate {
+  candidate: ImageInput;
+  shot: Shot;
+  garmentColor: string;
+  checkPerson: boolean; // compara la cara con la imagen de identidad (no aplica a la foto que la originó)
+}
+
+const QaReviews = z.object({
+  reviews: z.array(QaOutput.extend({ photo: z.number().int().describe("Número de la foto candidata (1, 2, …)") })),
+});
+
+// Revisa una o varias fotos en una sola llamada: la referencia del bordado, la identidad y la guía van una sola vez.
+// key identifica la llamada para mandarla en batch (ver Claude.ask).
+export async function runQaMany(opts: {
+  claude: Claude;
+  design: ImageInput;
+  identity: ImageInput | null;
+  candidates: QaCandidate[];
+  size?: { w: number; h: number };
+  placementGuide?: Buffer; // recuadro que marcó Diego sobre una foto de ejemplo
+  key?: string;
+}): Promise<QaResult[]> {
+  const images = [
+    { ...opts.design, label: "Referencia exacta del bordado:" },
+    ...(opts.identity ? [{ ...opts.identity, label: "Imagen de identidad de la persona modelo:" }] : []),
+    ...(opts.placementGuide ? [{ data: opts.placementGuide, mediaType: "image/jpeg" as const, label: "Guía de ubicación que marcó Diego (foto de ejemplo desenfocada; el recuadro rojo es donde debe ir el bordado y su tamaño aproximado):" }] : []),
+    ...opts.candidates.map((c, i) => ({ ...c.candidate, label: `Foto candidata ${i + 1}:` })),
+  ];
+  const guideRule = opts.placementGuide
+    ? "\nUbicación y tamaño: manda el recuadro rojo de la guía de Diego, no las reglas generales ni la etiqueta de ubicación. placement_ok es true si el bordado está aproximadamente en la misma zona del pecho que el recuadro (en tomas de otro ángulo, la misma zona del cuerpo). size_ok es true si su tamaño respecto al cuerpo es parecido al del recuadro (±30 %). La guía es solo para ubicación: no evalúes con ella la persona, el color ni el diseño."
+    : "";
+  const pedidos = opts.candidates
+    .map((c, i) => `Foto ${i + 1}: toma ${c.shot.framing}${c.shot.pose ? ` (pose: ${c.shot.pose})` : ""}, hoodie color ${c.garmentColor}, bordado en ${c.shot.placement}${opts.size ? ` de unos ${opts.size.w}×${opts.size.h} cm` : ""}. ${opts.identity && c.checkPerson ? "Compara la persona con la imagen de identidad." : "same_person: null."}`)
+    .join("\n");
+  const out = await opts.claude.ask({
+    system: SYSTEM,
+    images,
+    prompt: `${pedidos}${guideRule}\nEvalúa cada foto candidata por separado, sin comparar unas con otras, y devuelve una revisión por foto.`,
+    schema: QaReviews,
+    key: opts.key,
+  });
+  return opts.candidates.map((c, i) => {
+    const r = out.reviews.find((x) => x.photo === i + 1);
+    if (!r) throw new Error(`QA no devolvió la revisión de la foto ${i + 1}`);
+    const { photo: _photo, ...review } = r;
+    return { ...review, passed: qaPassed(review) };
+  });
+}
+
+// Una sola foto (prueba de --recolor).
 export async function runQa(opts: {
   claude: Claude;
   design: ImageInput;
@@ -40,24 +90,14 @@ export async function runQa(opts: {
   shot: Shot;
   garmentColor: string;
   size?: { w: number; h: number };
-  placementGuide?: Buffer; // recuadro que marcó Diego sobre una foto de ejemplo
+  placementGuide?: Buffer;
 }): Promise<QaResult> {
-  const images = [
-    { ...opts.design, label: "Referencia exacta del bordado:" },
-    ...(opts.identity ? [{ ...opts.identity, label: "Imagen de identidad de la persona modelo:" }] : []),
-    ...(opts.placementGuide ? [{ data: opts.placementGuide, mediaType: "image/jpeg" as const, label: "Guía de ubicación que marcó Diego (foto de ejemplo desenfocada; el recuadro rojo es donde debe ir el bordado y su tamaño aproximado):" }] : []),
-    { ...opts.candidate, label: "Foto candidata a revisar:" },
-  ];
-  const guideRule = opts.placementGuide
-    ? "\nUbicación y tamaño: manda el recuadro rojo de la guía de Diego, no las reglas generales ni la etiqueta de ubicación. placement_ok es true si el bordado está aproximadamente en la misma zona del pecho que el recuadro (en tomas de otro ángulo, la misma zona del cuerpo). size_ok es true si su tamaño respecto al cuerpo es parecido al del recuadro (±30 %). La guía es solo para ubicación: no evalúes con ella la persona, el color ni el diseño."
-    : "";
-  const out = await opts.claude.ask({
-    system: SYSTEM,
-    images,
-    prompt: `Toma pedida: ${opts.shot.framing}${opts.shot.pose ? ` (pose: ${opts.shot.pose})` : ""}, hoodie color ${opts.garmentColor}, bordado en ${opts.shot.placement}${opts.size ? ` de unos ${opts.size.w}×${opts.size.h} cm` : ""}.${guideRule}\nEvalúa la foto candidata.`,
-    schema: QaOutput,
-  });
-  const passed =
+  const [r] = await runQaMany({ ...opts, candidates: [{ candidate: opts.candidate, shot: opts.shot, garmentColor: opts.garmentColor, checkPerson: true }] });
+  return r;
+}
+
+function qaPassed(out: z.infer<typeof QaOutput>) {
+  return (
     out.embroidery_fidelity >= QA_THRESHOLDS.fidelity &&
     out.realism >= QA_THRESHOLDS.realism &&
     out.framing_ok &&
@@ -67,6 +107,6 @@ export async function runQa(opts: {
     out.stitch_texture_visible &&
     out.garment_color_ok &&
     !out.extra_text &&
-    out.same_person !== false;
-  return { ...out, passed };
+    out.same_person !== false
+  );
 }

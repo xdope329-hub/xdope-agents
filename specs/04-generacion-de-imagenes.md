@@ -88,6 +88,12 @@ Todas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueb
 3. **Menos reintentos.** Antes de generar, el Director de arte valida el prompt contra una lista de errores conocidos, y QA corre primero los chequeos baratos (OCR, color, SSIM) y solo después el modelo de visión. Meta: bajar reintentos de ~30 % a ~15 %.
 Estimado con las tres: ≈ 10–11 imágenes × USD 0.05 ≈ **USD 0.55 por producto** (≈ USD 16 por 30 productos), más el escalamiento a Pro cuando haga falta (también en batch).
 
+5. **Ahorros en Claude (aprobados por Diego el 2026-10-02).** Con la calidad económica, Claude pasó a ser la mayor parte del costo por producto.
+   - **Claude en batch** (Message Batches, 50 % menos): Curador, Director, QA y Copywriter envían su llamada en batch y el lote espera hasta la siguiente corrida (`--collect` o "Revisar batches" en el panel). Cada llamada queda en `runs/<lote>/claude/<key>.json`. Se apaga con `--realtime` o `CLAUDE_USE_BATCH=false`. Un producto necesita más rondas de recogida (≈ 7), cada una de minutos a pocas horas.
+   - **QA por etapa en una sola llamada:** las fotos de la misma etapa (primera foto, las 2 restantes, los reintentos) se revisan juntas; la referencia del bordado, la identidad y la guía van una sola vez.
+   - **Director en esfuerzo `medium`** en vez de `high`.
+   - No se usa caché de prompts: con batch las llamadas quedan separadas por minutos u horas y el caché (5 min) casi nunca se aprovecharía; escribirlo cuesta 25 % más.
+
 4. **Generar a 1K (aprobado por Diego el 2026-10-02).** Nano Banana 2 a 1K cuesta USD 0.067 (0.0335 en batch) contra 0.101 a 2K; en 4:5 sale de unos 928×1152 y se amplía a 1080×1350. Es la calidad **baja**; la **económica** también sale a ~1K.
 
 ## Experimento: recoloreado sin IA (aprobado para prueba el 2026-10-02)

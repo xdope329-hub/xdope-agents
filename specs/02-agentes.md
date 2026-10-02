@@ -101,6 +101,7 @@ Cada agente tiene una sola responsabilidad, entradas y salidas tipadas y criteri
 **Rol:** filtrar. Es el guardián de la regla 1 de la constitución.
 **Entradas:** candidatas de `MockupSet`, `DesignAsset`, `ShotList`.
 **Salida:** una imagen `final` por toma + `qa.json` con puntaje y motivos de rechazo.
+Las fotos de una misma etapa se revisan en una sola llamada al modelo de visión (cada una con su propio puntaje), en batch como el resto de Claude (specs/04).
 **Chequeos**
 | Chequeo | Método | Umbral |
 |---|---|---|

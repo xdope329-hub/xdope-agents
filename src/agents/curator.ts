@@ -59,6 +59,7 @@ export async function runCurator(opts: {
       images: [{ ...opts.design, label: "Foto del bordado:" }],
       prompt: `Categorías existentes en la tienda:\n${list}\n\nPrepara título, descripción corta y categorías.${feedback}`,
       schema: CuratorOutput,
+      key: `curador-${attempt}`,
     });
     const byName = new Map(opts.categories.map((c) => [c.name.toLowerCase(), c]));
     const categories = out.categories.flatMap((c) => {
