@@ -418,7 +418,7 @@ async function load() {
     if (r.has_photos && r.base_color) acts.push('<button data-act="recolor" data-run="' + esc(r.run_id) + '" data-base="' + esc(r.base_color) + '">Recolorear (preview)</button>');
     if (r.has_recolor) acts.push('<a href="/runs/' + encodeURIComponent(r.run_id) + '/recolor.html" target="_blank"><button>Ver recoloreado</button></a>');
     if (r.has_recolor) acts.push('<button data-act="extra" data-run="' + esc(r.run_id) + '">Colores a publicar' + (r.extra_colors.length ? " (" + r.extra_colors.length + ")" : "") + "</button>");
-    if (r.extra_colors.length && ["inactive_created", "live"].includes(r.status)) acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">Actualizar en la tienda</button>');
+    if (r.extra_colors.length && r.status === "inactive_created") acts.push('<button data-act="publish" data-run="' + esc(r.run_id) + '">Actualizar en la tienda</button>');
     if (r.admin_url) acts.push('<a href="' + esc(r.admin_url) + '" target="_blank"><button>Abrir en admin</button></a>');
     return "<tr><td><img class=thumb loading=lazy src='/runs/" + encodeURIComponent(r.run_id) + "/design.jpg'></td>" +
       "<td><b>" + esc(r.title || r.run_id) + '</b><div class="muted">' + esc(r.run_id) + " · calidad " + esc(r.quality) + " · " + ago(r.updated_at) + "</div>" + (r.error ? '<div class="err">Falló en ' + esc(r.error.step) + ": " + esc(r.error.reason) + "</div>" : "") + "</td>" +

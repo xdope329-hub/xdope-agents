@@ -170,6 +170,8 @@ async function processRun(runId: string, log: (m: string) => void) {
   }
   // Un producto ya creado solo se vuelve a publicar (actualizar) si se pide --publish, p. ej. para sumar colores teñidos.
   if ((state.status === "inactive_created" || state.status === "live") && !PUBLISH) return log(`Ya publicado (${state.status})`);
+  // Actualizar deja el producto en status 0: nunca sobre uno que Diego ya activó.
+  if (state.status === "live") return log("El producto ya está activo en la tienda: no se actualiza para no desactivarlo");
   const dir = store.runDir(runId);
   const design: ImageInput = { data: await readFile(store.file(runId, "design.jpg")), mediaType: "image/jpeg", label: "" };
   const source = JSON.parse(await readFile(store.file(runId, "source.json"), "utf8"));
