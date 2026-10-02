@@ -86,4 +86,12 @@ Todas quedan bajo el tope de USD 3 de la constitución; se confirma con la prueb
 3. **Menos reintentos.** Antes de generar, el Director de arte valida el prompt contra una lista de errores conocidos, y QA corre primero los chequeos baratos (OCR, color, SSIM) y solo después el modelo de visión. Meta: bajar reintentos de ~30 % a ~15 %.
 Estimado con las tres: ≈ 10–11 imágenes × USD 0.05 ≈ **USD 0.55 por producto** (≈ USD 16 por 30 productos), más el escalamiento a Pro cuando haga falta (también en batch).
 
+4. **Generar a 1K (aprobado por Diego el 2026-10-02).** Nano Banana 2 a 1K cuesta USD 0.067 (0.0335 en batch) contra 0.101 a 2K. En 4:5 sale de unos 928×1152 y se amplía a 1080×1350. Se controla con `IMAGE_SIZE` (por defecto `1K`). Con batch: ≈ 12 imágenes × USD 0.034 ≈ **USD 0.40 por producto** de 3 colores.
+
+## Experimento: recoloreado sin IA (aprobado para prueba el 2026-10-02)
+Objetivo: que cada color extra cueste casi nada. Cada pose se genera una vez en el color más claro del producto; Gemini devuelve una máscara de la tela (1 imagen por pose) y el código tiñe la tela al resto de colores conservando luces y sombras (`src/images/recolor.ts`). Solo se tiñen píxeles dentro de la máscara y con croma cercano al color base, para no tocar el bordado.
+- Se prueba con `npm run trial -- --recolor <fotos>`: además de las fotos generadas, `review.html` muestra al lado la versión teñida de cada toma, con su puntaje de QA.
+- Costo estimado si se adopta: 3 poses generadas (con reintentos ≈ 4 imágenes) + 3 máscaras ≈ USD 0.25 por producto en batch, sin importar cuántos colores tenga.
+- Riesgo: colores oscuros teñidos desde uno claro pueden verse menos reales, y un bordado de hilos grises o blancos puede quedar dentro de la máscara. Solo pasa al pipeline si Diego aprueba el resultado de la prueba; las fotos teñidas pasan por el mismo QA.
+
 **Opción a evaluar en la prueba:** FLUX.2 [pro] (≈ USD 0.03 por megapíxel) queda en un rango parecido. **Descartado:** FLUX.2 [klein] local, porque la GPU de Diego no alcanza (2026-09-30).

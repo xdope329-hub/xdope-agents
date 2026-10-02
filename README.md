@@ -54,7 +54,7 @@ Para publicar se usa el usuario dedicado de los agentes (`XDOPE_AGENT_EMAIL` / `
 ## Prueba de los agentes (sin publicar)
 
 - **En GitHub:** pestaña Actions → "Prueba de agentes" → Run workflow. Pega URLs de fotos de bordados separadas por coma, o deja vacío para usar `samples/`. Necesita los secrets `ANTHROPIC_API_KEY` y `GEMINI_API_KEY`. El resultado se descarga como artefacto `resultados-prueba`.
-- **En tu PC:** `npm run trial -- [--batch] "ruta/a/bordado.jpg"`. El resultado queda en `runs/trial-.../review.html`.
+- **En tu PC:** `npm run trial -- [--batch] [--recolor] "ruta/a/bordado.jpg"`. El resultado queda en `runs/trial-.../review.html`. Con `--recolor` cada toma generada aparece junto a su versión teñida por código, para comparar (experimento para bajar el costo de los colores extra).
 
 ## Desarrollo
 

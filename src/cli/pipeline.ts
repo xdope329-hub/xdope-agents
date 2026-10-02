@@ -37,6 +37,8 @@ const MODEL = env.IMAGE_MODEL ?? "gemini-3.1-flash-image";
 const ESCALATION = env.IMAGE_ESCALATION_MODEL ?? MODEL;
 const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
+// 1K (≈ 928×1152 en 4:5) se amplía un poco a 1080×1350; cuesta un tercio menos que 2K (specs/04).
+const IMAGE_SIZE = z.enum(["1K", "2K", "4K"]).parse(env.IMAGE_SIZE ?? "1K");
 const BATCH = flag("batch") || env.IMAGE_USE_BATCH === "true";
 const PUBLISH = flag("publish");
 const CATALOG = env.DESIGNS_CATALOG ?? "designs.json";
@@ -156,7 +158,8 @@ async function processRun(runId: string, log: (m: string) => void) {
     if (state.status === "shots_planned") state = await store.transition(runId, "generating");
     const { results, imageCost } = await generateMockups({
       claude, gemini, runId, design, shotList, dir,
-      model: MODEL, escalationModel: ESCALATION, maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H], batch: BATCH, log,
+      model: MODEL, escalationModel: ESCALATION, maxCostUsd: MAX_COST, outSize: [OUT_W, OUT_H],
+    imageSize: IMAGE_SIZE, batch: BATCH, log,
     });
     await store.writeArtifact(runId, "mockups.json", MockupSet, toMockupSet(runId, results, imageCost));
     qa = { results, image_cost_usd: Number(imageCost.toFixed(3)) };

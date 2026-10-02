@@ -1,10 +1,14 @@
 import { GoogleGenAI, JobState, type GenerateContentResponse, type InlinedRequest } from "@google/genai";
 
-// USD por imagen a 2K, precios públicos al 2026-09-30 (specs/04). El modo batch cuesta la mitad.
-const PRICE_2K: Record<string, number> = {
-  "gemini-3.1-flash-image": 0.101,
-  "gemini-3-pro-image": 0.134,
+export type ImageSize = "1K" | "2K" | "4K";
+
+// USD por imagen según resolución, precios públicos al 2026-10-02 (specs/04). El modo batch cuesta la mitad.
+const PRICES: Record<string, Record<ImageSize, number>> = {
+  "gemini-3.1-flash-image": { "1K": 0.067, "2K": 0.101, "4K": 0.151 },
+  "gemini-3-pro-image": { "1K": 0.134, "2K": 0.134, "4K": 0.24 },
 };
+
+export const imagePrice = (model: string, size: ImageSize) => PRICES[model]?.[size] ?? 0;
 const BATCH_DISCOUNT = 0.5;
 
 export interface RefImage {
@@ -18,7 +22,7 @@ export interface ImageRequest {
   prompt: string;
   refs: RefImage[];
   aspectRatio: string;
-  imageSize: "1K" | "2K" | "4K";
+  imageSize: ImageSize;
 }
 
 export interface GeneratedImage {
@@ -38,7 +42,7 @@ export class GeminiImages {
 
   async generate(req: ImageRequest): Promise<GeneratedImage> {
     const response = await this.ai.models.generateContent({ model: req.model, ...toRequest(req) });
-    return fromResponse(response, req.model, false);
+    return fromResponse(response, req.model, req.imageSize, false);
   }
 
   // Envía todas las solicitudes en un solo trabajo batch (mitad de precio) y espera
@@ -48,6 +52,7 @@ export class GeminiImages {
     opts: { displayName: string; pollSeconds?: number; onCreated?: (jobName: string) => void; log?: (msg: string) => void },
   ): Promise<Map<string, GeneratedImage | Error>> {
     const model = requests[0]?.req.model;
+    const size = requests[0]?.req.imageSize ?? "2K";
     if (!model) return new Map();
     if (requests.some((r) => r.req.model !== model)) throw new Error("Un batch solo admite un modelo");
 
@@ -83,7 +88,7 @@ export class GeminiImages {
         return;
       }
       try {
-        results.set(key, fromResponse(r.response, model, true));
+        results.set(key, fromResponse(r.response, model, size, true));
       } catch (err) {
         results.set(key, err instanceof Error ? err : new Error(String(err)));
       }
@@ -109,13 +114,13 @@ function toRequest(req: ImageRequest) {
   };
 }
 
-function fromResponse(response: GenerateContentResponse, model: string, batch: boolean): GeneratedImage {
+function fromResponse(response: GenerateContentResponse, model: string, size: ImageSize, batch: boolean): GeneratedImage {
   const out = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
   if (!out?.inlineData?.data) {
     const reason = response.candidates?.[0]?.finishReason ?? response.promptFeedback?.blockReason ?? "desconocido";
     throw new Error(`Gemini no devolvió imagen (motivo: ${reason})`);
   }
-  const price = PRICE_2K[model] ?? 0;
+  const price = imagePrice(model, size);
   return {
     data: Buffer.from(out.inlineData.data, "base64"),
     mimeType: out.inlineData.mimeType ?? "image/png",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GoogleGenAI } from "@google/genai";
-import { GeminiImages, type ImageRequest } from "../src/images/gemini.js";
+import { GeminiImages, imagePrice, type ImageRequest } from "../src/images/gemini.js";
 
 const req: ImageRequest = { model: "gemini-3.1-flash-image", prompt: "p", refs: [], aspectRatio: "4:5", imageSize: "2K" };
 const imagePart = (b: string) => ({ candidates: [{ content: { parts: [{ inlineData: { mimeType: "image/png", data: Buffer.from(b).toString("base64") } }] } }] });
@@ -70,5 +70,13 @@ describe("GeminiImages.generateBatch", () => {
         { displayName: "t", pollSeconds: 0 },
       ),
     ).rejects.toThrow("un modelo");
+  });
+});
+
+describe("imagePrice", () => {
+  it("cobra según la resolución", () => {
+    expect(imagePrice("gemini-3.1-flash-image", "1K")).toBeCloseTo(0.067);
+    expect(imagePrice("gemini-3.1-flash-image", "2K")).toBeCloseTo(0.101);
+    expect(imagePrice("modelo-desconocido", "1K")).toBe(0);
   });
 });

@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { runQa, type QaResult } from "../agents/qa.js";
 import type { MockupSet, Shot, ShotList } from "../contracts/index.js";
 import type { Claude, ImageInput } from "../llm/claude.js";
-import type { GeminiImages, GeneratedImage, ImageRequest } from "./gemini.js";
+import type { GeminiImages, GeneratedImage, ImageRequest, ImageSize } from "./gemini.js";
 
 const CONCURRENCY = 3;
 
@@ -21,6 +21,7 @@ export interface MockupOptions {
   escalationModel: string;
   maxCostUsd: number;
   outSize: [number, number];
+  imageSize: ImageSize; // se genera a esta resolución y se ajusta a outSize
   batch: boolean;
   log: (msg: string) => void;
 }
@@ -52,7 +53,7 @@ export async function generateMockups(o: MockupOptions): Promise<{ results: Shot
       ...(identity ? [{ role: "Reference 2: the model. Use this exact same person (face, hair, body).", data: identity.data, mimeType: identity.mediaType }] : []),
     ],
     aspectRatio: "4:5",
-    imageSize: "2K",
+    imageSize: o.imageSize,
   });
 
   // `pregenerated` es el resultado del primer intento cuando ya salió en un batch.

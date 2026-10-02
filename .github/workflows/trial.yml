@@ -11,6 +11,14 @@ on:
         description: "Usar batch de Gemini (mitad de precio, puede tardar horas)"
         type: boolean
         default: false
+      recolor:
+        description: "Experimento: teñir por código las fotos a los otros colores y mostrarlas al lado"
+        type: boolean
+        default: false
+      image_size:
+        description: "Resolución de generación (1K es más barato)"
+        required: false
+        default: "1K"
       image_model:
         description: "Modelo de imágenes principal"
         required: false
@@ -34,14 +42,16 @@ jobs:
           IMAGE_MODEL: ${{ inputs.image_model }}
           DESIGN_URLS: ${{ inputs.design_urls }}
           IMAGE_USE_BATCH: ${{ inputs.batch }}
+          IMAGE_SIZE: ${{ inputs.image_size }}
+          RECOLOR: ${{ inputs.recolor && '--recolor' || '' }}
         run: |
           if [ -n "$DESIGN_URLS" ]; then
-            npm run trial -- "$DESIGN_URLS"
+            npm run trial -- $RECOLOR "$DESIGN_URLS"
           else
             shopt -s nullglob nocaseglob
             files=(samples/*.jpg samples/*.jpeg samples/*.png samples/*.webp)
             if [ ${#files[@]} -eq 0 ]; then echo "No hay URLs ni fotos en samples/"; exit 1; fi
-            npm run trial -- "${files[@]}"
+            npm run trial -- $RECOLOR "${files[@]}"
           fi
       - name: Guardar resultados
         if: always()
