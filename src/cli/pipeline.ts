@@ -34,7 +34,7 @@ const opt = (name: string) => {
 const list = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
 const MODEL = env.IMAGE_MODEL ?? "gemini-3.1-flash-image";
-const ESCALATION = env.IMAGE_ESCALATION_MODEL ?? "gemini-3-pro-image";
+const ESCALATION = env.IMAGE_ESCALATION_MODEL ?? MODEL;
 const MAX_COST = Number(env.MAX_IMAGE_COST_PER_PRODUCT ?? 3);
 const [OUT_W, OUT_H] = (env.IMAGE_OUTPUT_SIZE ?? "1080x1350").split("x").map(Number);
 const BATCH = flag("batch") || env.IMAGE_USE_BATCH === "true";

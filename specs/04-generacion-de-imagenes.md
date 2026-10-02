@@ -20,7 +20,7 @@ Fuentes: [precios Gemini API](https://ai.google.dev/gemini-api/docs/pricing), [m
 ## Decisión
 Diego pidió (2026-09-30): fotos verticales 1080×1350, calidad decente sin ser la máxima, y modelos que parezcan personas reales.
 - **Principal: Nano Banana 2 (`gemini-3.1-flash-image`) a 2K.** Calidad suficiente para 1080×1350 a ≈ USD 0.10 por imagen, con referencias de objeto (bordado) y de personaje (modelo).
-- **Escalamiento: Nano Banana Pro** solo para las tomas que Nano Banana 2 no logra pasar en QA (fidelidad o realismo) tras el primer reintento. Así se paga el modelo caro solo cuando hace falta.
+- **Reintentos con el mismo modelo económico.** Diego probó Nano Banana 2 y le gustó el resultado (2026-10-02), así que las tomas que fallan QA se regeneran también con Nano Banana 2. Nano Banana Pro queda solo como opción manual (`IMAGE_ESCALATION_MODEL=gemini-3-pro-image`).
 - **Respaldo de proveedor: FLUX.2 [flex]**, con el mismo adaptador `ImageProvider`, si Gemini falla o no convence en la prueba.
 - **La decisión se confirma con una prueba comparativa** (tarea 8a del plan): 2 diseños reales × 3 tomas × {Nano Banana Pro, Nano Banana 2, FLUX.2 [flex]}, medidos con los umbrales del QA visual. Gana la de mayor tasa de aprobación; a igualdad, la más barata.
 
