@@ -54,7 +54,8 @@ export class GeminiImages {
     const response = await this.ai.models.generateContent({
       model: opts.model,
       contents: [{ role: "user", parts: [{ inlineData: { mimeType: opts.mimeType, data: opts.image.toString("base64") } }, { text: opts.prompt }] }],
-      config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
+      // thinkingBudget 0 solo existe en la familia 2.5; los modelos nuevos lo rechazan.
+      config: { responseMimeType: "application/json", ...(opts.model.startsWith("gemini-2.5") ? { thinkingConfig: { thinkingBudget: 0 } } : {}) },
     });
     const text = response.text;
     if (!text) throw new Error(`Gemini no devolvió texto (motivo: ${response.candidates?.[0]?.finishReason ?? "desconocido"})`);

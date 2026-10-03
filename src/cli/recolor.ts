@@ -46,7 +46,7 @@ for (const shot of shotList.shots) {
   const original = `mockups/${shot.shot_id}.jpg`;
   if (!(await exists(path.join(dir, original)))) continue;
   const photo = await readFile(path.join(dir, original));
-  const maskFile = path.join(dir, "mockups", "recolor", `${shot.shot_id}-mask-v2.png`);
+  const maskFile = path.join(dir, "mockups", "recolor", `${shot.shot_id}-mask-v3.png`);
   let mask: Buffer;
   if (await exists(maskFile)) {
     mask = await readFile(maskFile);
