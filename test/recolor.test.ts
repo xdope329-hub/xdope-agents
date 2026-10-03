@@ -13,12 +13,13 @@ describe("labToRgb", () => {
 });
 
 describe("recolorGarment", () => {
-  // Foto de 40×40: fondo azul, "hoodie" gris claro con una sombra, y un "bordado" rojo dentro de la tela.
+  // Foto de 40×40: fondo azul, "hoodie" gris claro con sombra gradual, y un "bordado" rojo dentro de la tela.
   const W = 40;
   const pixel = (x: number, y: number): [number, number, number] => {
     if (x < 10 || x >= 30) return [40, 90, 200];
     if (x >= 18 && x < 22 && y >= 18 && y < 22) return [200, 30, 30];
-    return y < 20 ? [220, 220, 220] : [170, 170, 170];
+    const g = Math.round(220 - y * 1.5); // sombra continua, como en una foto real
+    return [g, g, g];
   };
   const raw = Buffer.alloc(W * W * 3);
   for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) raw.set(pixel(x, y), (y * W + x) * 3);
@@ -32,7 +33,7 @@ describe("recolorGarment", () => {
     const out = await recolorGarment(await photo(), await mask(), "#DCDCDC", "#2E4A7D");
     const px = await sharp(out).raw().toBuffer();
     const at = (x: number, y: number) => [...px.subarray((y * W + x) * 3, (y * W + x) * 3 + 3)];
-    const [light, dark] = [at(12, 5), at(12, 35)];
+    const [light, dark] = [at(15, 5), at(15, 35)]; // lejos del borde, que se recorta a propósito
     expect(light[2]).toBeGreaterThan(light[0] + 30); // azul marino
     expect(rgbToLab(light as [number, number, number])[0]).toBeGreaterThan(rgbToLab(dark as [number, number, number])[0]);
     const red = at(20, 20);
