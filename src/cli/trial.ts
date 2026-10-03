@@ -136,7 +136,7 @@ async function recolorShots(shotList: ShotList, results: ShotResult[], design: I
     const photo = await readFile(path.join(dir, src.file));
     let mask: Buffer;
     try {
-      const m = await garmentMask(gemini, photo, model, imageSize);
+      const m = await garmentMask(gemini, photo);
       cost += m.cost_usd;
       mask = m.data;
       await writeFile(path.join(dir, "mockups", "recolor", `${src.shot.shot_id}-mask.png`), await sharp(mask).png().toBuffer());

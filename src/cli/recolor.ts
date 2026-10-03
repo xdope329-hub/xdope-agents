@@ -1,7 +1,7 @@
 // Vista previa del recoloreado sin IA (specs/04) para un lote ya generado: tiñe por código sus fotos finales a
 // otros colores de la tienda y deja runs/<run_id>/recolor.html para compararlas con la original.
 // Uso: npm run recolor -- <run_id> [--colors "Negro,Beige"]   (sin --colors: todos los demás colores de la tienda)
-// Costo: 1 máscara de Gemini por foto, solo la primera vez (se guarda y se reutiliza); el teñido es gratis.
+// Costo: 1 segmentación de Gemini por foto (≈ USD 0.01), solo la primera vez (se guarda y se reutiliza); el teñido es gratis.
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
@@ -46,14 +46,14 @@ for (const shot of shotList.shots) {
   const original = `mockups/${shot.shot_id}.jpg`;
   if (!(await exists(path.join(dir, original)))) continue;
   const photo = await readFile(path.join(dir, original));
-  const maskFile = path.join(dir, "mockups", "recolor", `${shot.shot_id}-mask.png`);
+  const maskFile = path.join(dir, "mockups", "recolor", `${shot.shot_id}-mask-v2.png`);
   let mask: Buffer;
   if (await exists(maskFile)) {
     mask = await readFile(maskFile);
   } else {
     console.log(`Máscara de ${shot.shot_id}…`);
     try {
-      const m = await garmentMask(gemini, photo, model, imageSize);
+      const m = await garmentMask(gemini, photo);
       cost += m.cost_usd;
       mask = await sharp(m.data).png().toBuffer();
       await writeFile(maskFile, mask);

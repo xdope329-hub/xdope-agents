@@ -49,6 +49,18 @@ export class GeminiImages {
     return fromResponse(response, req.model, false, req.imageSize);
   }
 
+  // Pide texto (JSON) a un modelo de Gemini sobre una foto; se usa para las máscaras de segmentación del recoloreado.
+  async describeImage(opts: { model: string; prompt: string; image: Buffer; mimeType: string }): Promise<string> {
+    const response = await this.ai.models.generateContent({
+      model: opts.model,
+      contents: [{ role: "user", parts: [{ inlineData: { mimeType: opts.mimeType, data: opts.image.toString("base64") } }, { text: opts.prompt }] }],
+      config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
+    });
+    const text = response.text;
+    if (!text) throw new Error(`Gemini no devolvió texto (motivo: ${response.candidates?.[0]?.finishReason ?? "desconocido"})`);
+    return text;
+  }
+
   // Envía todas las solicitudes en un solo trabajo batch (mitad de precio) y espera
   // el resultado. Todas deben usar el mismo modelo. Devuelve imagen o error por clave.
   async generateBatch(
