@@ -40,3 +40,28 @@ describe("máscara por segmentación", () => {
     await expect(recolorGarment(photo, await solid(255, W, W), "#DCDCDC", "#2E4A7D")).rejects.toThrow(/no confiable/);
   });
 });
+
+describe("recolorGarment con una máscara que se sale del hoodie", () => {
+  it("no tiñe la piel ni el fondo gris aunque la máscara los cubra", async () => {
+    // 100×100: fondo gris claro, hoodie negro en el centro, "piel" a la izquierda del hoodie.
+    const raw = Buffer.alloc(W * W * 3);
+    for (let y = 0; y < W; y++)
+      for (let x = 0; x < W; x++) {
+        const px = x >= 30 && x < 70 ? [25, 25, 25] : x >= 20 && x < 30 ? [224, 172, 140] : [200, 200, 200];
+        raw.set(px, (y * W + x) * 3);
+      }
+    const photo = await sharp(raw, { raw: { width: W, height: W, channels: 3 } }).png().toBuffer();
+    // Máscara demasiado ancha: x 15–85 (incluye piel y fondo).
+    const m = Buffer.alloc(W * W);
+    for (let y = 0; y < W; y++) for (let x = 15; x < 85; x++) m[y * W + x] = 255;
+    const mask = await sharp(m, { raw: { width: W, height: W, channels: 1 } }).png().toBuffer();
+    const out = await sharp(await recolorGarment(photo, mask, "#151515", "#2E4A7D")).raw().toBuffer();
+    const at = (x: number, y: number) => [...out.subarray((y * W + x) * 3, (y * W + x) * 3 + 3)];
+    expect(at(50, 50)[2]).toBeGreaterThan(at(50, 50)[0] + 20); // hoodie teñido
+    const skin = at(25, 50);
+    expect(Math.abs(skin[0] - 224)).toBeLessThan(12);
+    expect(Math.abs(skin[2] - 140)).toBeLessThan(12);
+    const bg = at(78, 50);
+    expect(Math.abs(bg[0] - bg[2])).toBeLessThan(8); // el fondo sigue gris
+  });
+});

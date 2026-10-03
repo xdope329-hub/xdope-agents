@@ -86,7 +86,7 @@ function page() {
   const cell = (file: string, label: string, hex: string) =>
     `<figure><img src="${esc(file)}?v=${Date.now()}" loading="lazy"><figcaption><span class="sw" style="background:${esc(hex)}"></span>${esc(label)}</figcaption></figure>`;
   const body = rows
-    .map((r) => `<h2>${esc(r.shot_id)}</h2><div class="grid">${cell(r.original, `${base.name} (original)`, base.hex)}${r.versions.map((v) => cell(v.file, v.color, v.hex)).join("")}</div>`)
+    .map((r) => `<h2>${esc(r.shot_id)}</h2><div class="grid">${cell(r.original, `${base.name} (original)`, base.hex)}${r.versions.map((v) => cell(v.file, v.color, v.hex)).join("")}${cell(`mockups/recolor/${r.shot_id}-mask-v3.png`, "máscara (blanco = se tiñe)", "#ffffff")}</div>`)
     .join("\n");
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recoloreado ${esc(runId!)}</title>
 <style>:root{--bg:#fafafa;--fg:#111;--card:#fff}@media (prefers-color-scheme:dark){:root{--bg:#121212;--fg:#eee;--card:#1c1c1c}}

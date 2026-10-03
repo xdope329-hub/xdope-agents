@@ -6,6 +6,9 @@ import type { GeminiImages } from "./gemini.js";
 
 // Distancia máxima de croma (a, b) al color base para que un píxel cuente como tela: protege los hilos del bordado.
 const MAX_CHROMA_DISTANCE = 18;
+// Distancia de croma al color medido de la tela, y píxeles que se recortan en el borde de la máscara.
+const FABRIC_CHROMA_DISTANCE = 10;
+const EDGE_PX = 2;
 
 // La máscara se arma por color, no la "dibuja" un modelo: Gemini solo da los recuadros del hoodie y del bordado
 // (respuesta corta y barata) y el código marca, dentro del recuadro del hoodie, los píxeles del color real de la tela
@@ -175,66 +178,121 @@ export async function maskFromSegments(segments: Segment[], width: number, heigh
 }
 
 // Tiñe la tela de `photo` (hoodie de color `baseHex`) a `targetHex` conservando pliegues y sombras.
+// La máscara de Gemini es aproximada: se recorta 2 px en el borde, se queda solo con los píxeles del color real
+// de la tela (medido en la foto) y se descartan manchas sueltas, para no tocar piel, pelo ni fondo.
 export async function recolorGarment(photo: Buffer, mask: Buffer, baseHex: string, targetHex: string): Promise<Buffer> {
   const { data, info } = await sharp(photo).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { width, height } = info;
-  // Máscara al tamaño de la foto, con borde suavizado para que el corte no se note.
-  // Se binariza antes de suavizar: una máscara gris o "pintada" no puede teñir media foto a medias.
-  const hard = await sharp(mask).resize(width, height, { fit: "fill" }).greyscale().threshold(128).extractChannel(0).raw().toBuffer();
-  const coverage = hard.reduce((sum, v) => sum + (v ? 1 : 0), 0) / hard.length;
+  const n = width * height;
+  // Se binariza antes de nada: una máscara gris o "pintada" no puede teñir media foto a medias.
+  const hard = await sharp(mask).resize(width, height, { fit: "fill" }).greyscale().threshold(128).raw().toBuffer();
+  const coverage = hard.reduce((sum, v) => sum + (v ? 1 : 0), 0) / n;
   if (coverage < MIN_COVERAGE || coverage > MAX_COVERAGE)
     throw new Error(`Máscara no confiable: marca ${(coverage * 100).toFixed(0)}% de la foto como hoodie`);
-  // extractChannel: sharp devuelve 3 canales al desenfocar una imagen de 1 canal; sin esto la máscara quedaba
-  // desalineada con la foto y se teñían franjas enteras (piel y fondo incluidos).
-  const alpha = await sharp(hard, { raw: { width, height, channels: 1 } }).blur(1.5).extractChannel(0).raw().toBuffer();
+  const inner = erode(hard, width, height, EDGE_PX);
 
-  // Croma base: el color real de la tela en la foto (mediana dentro de la máscara); baseHex queda de respaldo.
-  let [, baseA, baseB] = rgbToLab(hexToRgb(baseHex));
-  {
-    const as: number[] = [];
-    const bs: number[] = [];
-    for (let i = 0; i < hard.length; i += 5) {
-      if (!hard[i]) continue;
-      const [, a, b] = rgbToLab([data[i * 3], data[i * 3 + 1], data[i * 3 + 2]]);
-      as.push(a);
-      bs.push(b);
-    }
-    if (as.length) {
-      as.sort((p, q) => p - q);
-      bs.sort((p, q) => p - q);
-      [baseA, baseB] = [as[as.length >> 1], bs[bs.length >> 1]];
-    }
-  }
-  const [targetL, targetA, targetB] = rgbToLab(hexToRgb(targetHex));
-  const n = width * height;
   const lab = new Float32Array(n * 3);
-  const weight = new Float32Array(n);
+  for (let i = 0; i < n; i++) lab.set(rgbToLab([data[i * 3], data[i * 3 + 1], data[i * 3 + 2]]), i * 3);
+
+  // Color real de la tela: mediana de a/b y rango de luminosidad de los píxeles de la máscara cercanos al color base.
+  const [, baseA, baseB] = rgbToLab(hexToRgb(baseHex));
+  const sample = { a: [] as number[], b: [] as number[], L: [] as number[] };
+  for (let i = 0; i < n; i++) {
+    if (!inner[i] || Math.hypot(lab[i * 3 + 1] - baseA, lab[i * 3 + 2] - baseB) > MAX_CHROMA_DISTANCE) continue;
+    sample.L.push(lab[i * 3]);
+    sample.a.push(lab[i * 3 + 1]);
+    sample.b.push(lab[i * 3 + 2]);
+  }
+  if (sample.L.length < n * 0.01) throw new Error("La máscara no marcó tela del hoodie");
+  const [fabA, fabB] = [quantile(sample.a, 0.5), quantile(sample.b, 0.5)];
+  const [minL, maxL] = fabricLightness(sample.L);
+
+  const fabric = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const L = lab[i * 3];
+    if (inner[i] && L >= minL && L <= maxL && Math.hypot(lab[i * 3 + 1] - fabA, lab[i * 3 + 2] - fabB) <= FABRIC_CHROMA_DISTANCE) fabric[i] = 255;
+  }
+  dropSpecks(fabric, width, height, Math.max(50, Math.round(n * 0.002)));
+  const alpha = await sharp(Buffer.from(fabric), { raw: { width, height, channels: 1 } }).blur(1).toColourspace("b-w").raw().toBuffer();
+
   let sumL = 0;
   let count = 0;
-  for (let i = 0; i < n; i++) {
-    const [L, a, b] = rgbToLab([data[i * 3], data[i * 3 + 1], data[i * 3 + 2]]);
-    lab.set([L, a, b], i * 3);
-    const inFabric = Math.hypot(a - baseA, b - baseB) <= MAX_CHROMA_DISTANCE;
-    weight[i] = inFabric ? alpha[i] / 255 : 0;
-    if (weight[i] > 0.5) {
-      sumL += L;
-      count++;
-    }
-  }
+  for (let i = 0; i < n; i++) if (fabric[i]) (sumL += lab[i * 3]), count++;
   if (count === 0) throw new Error("La máscara no marcó tela del hoodie");
   const meanL = sumL / count;
+  const [targetL, targetA, targetB] = rgbToLab(hexToRgb(targetHex));
   // Las sombras se escalan con la luminosidad del color destino para que un hoodie oscuro no quede plano ni gris.
   const shade = Math.min(1, Math.max(0.35, targetL / meanL));
 
   const out = Buffer.from(data);
   for (let i = 0; i < n; i++) {
-    const w = weight[i];
+    // El suavizado del borde solo puede quitar tinte hacia adentro, nunca agregarlo fuera de la tela.
+    const w = inner[i] ? alpha[i] / 255 : 0;
     if (w === 0) continue;
     const L = Math.min(100, Math.max(0, targetL + (lab[i * 3] - meanL) * shade));
     const rgb = labToRgb([L, targetA, targetB]);
     for (let c = 0; c < 3; c++) out[i * 3 + c] = Math.round(data[i * 3 + c] * (1 - w) + rgb[c] * w);
   }
-  return sharp(out, { raw: { width, height, channels: 3 } }).jpeg({ quality: 90 }).toBuffer();
+  return sharp(out, { raw: { width, height, channels: 3 } }).jpeg({ quality: 90, chromaSubsampling: "4:4:4" }).toBuffer();
+}
+
+// Rango de luminosidad de la tela: el tramo continuo del histograma alrededor del valor más frecuente. Un fondo gris
+// junto a un hoodie negro tiene el mismo croma pero otra luminosidad, y queda fuera por el hueco entre ambos.
+function fabricLightness(values: number[]): [number, number] {
+  const BIN = 2;
+  const hist = new Array(Math.ceil(100 / BIN) + 1).fill(0);
+  for (const L of values) hist[Math.min(hist.length - 1, Math.max(0, Math.floor(L / BIN)))]++;
+  const mode = hist.indexOf(Math.max(...hist));
+  const floor = Math.max(1, values.length * 0.002);
+  let [lo, hi] = [mode, mode];
+  while (lo > 0 && hist[lo - 1] >= floor) lo--;
+  while (hi < hist.length - 1 && hist[hi + 1] >= floor) hi++;
+  return [lo * BIN - 2, (hi + 1) * BIN + 2];
+}
+
+function quantile(values: number[], q: number) {
+  const sorted = Float64Array.from(values).sort();
+  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+}
+
+// Erosión cuadrada de radio r (dos pasadas separables): el borde de la máscara cae sobre piel o fondo.
+function erode(mask: Buffer, width: number, height: number, r: number): Uint8Array {
+  const tmp = new Uint8Array(width * height);
+  const out = new Uint8Array(width * height);
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      let ok = 1;
+      for (let k = -r; k <= r && ok; k++) if (!mask[y * width + Math.min(width - 1, Math.max(0, x + k))]) ok = 0;
+      tmp[y * width + x] = ok;
+    }
+  for (let y = 0; y < height; y++)
+    for (let x = 0; x < width; x++) {
+      let ok = 1;
+      for (let k = -r; k <= r && ok; k++) if (!tmp[Math.min(height - 1, Math.max(0, y + k)) * width + x]) ok = 0;
+      out[y * width + x] = ok;
+    }
+  return out;
+}
+
+// Borra regiones sueltas de menos de `minSize` píxeles (manchas en el fondo o la piel que pasaron el filtro de color).
+function dropSpecks(mask: Uint8Array, width: number, height: number, minSize: number) {
+  const seen = new Uint8Array(mask.length);
+  const stack: number[] = [];
+  for (let start = 0; start < mask.length; start++) {
+    if (!mask[start] || seen[start]) continue;
+    const region: number[] = [];
+    stack.push(start);
+    seen[start] = 1;
+    while (stack.length) {
+      const i = stack.pop()!;
+      region.push(i);
+      const x = i % width;
+      for (const j of [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, i - width, i + width])
+        if (j >= 0 && j < mask.length && mask[j] && !seen[j]) (seen[j] = 1), stack.push(j);
+    }
+    if (region.length < minSize) for (const i of region) mask[i] = 0;
+  }
+  void height;
 }
 
 export function labToRgb([L, a, b]: [number, number, number]): [number, number, number] {
